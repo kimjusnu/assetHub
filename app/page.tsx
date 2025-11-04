@@ -855,24 +855,271 @@ export default function Home() {
         <div className="flex-1 flex flex-col lg:flex-row">
           {/* 왼쪽: 서비스 소개 */}
           <div className="flex-1 flex items-center justify-center p-8 lg:p-12 bg-white lg:bg-slate-50">
-            <div className="max-w-md mx-auto lg:mx-0">
-              <div className="mb-8">
-                <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
-                  AssetHub
-                </h1>
-                <p className="text-lg text-slate-600 mb-6">
-                  개인 자산을 체계적으로 관리하고
+            <div className="max-w-2xl mx-auto lg:mx-0 w-full">
+              <div className="mb-12">
+                <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6 leading-tight">
+                  당신의 자산을 위한
                   <br />
-                  투자 성과를 한눈에 확인하세요
+                  프라이빗 컨시어지 서비스
+                </h1>
+                <p className="text-base text-slate-600 leading-relaxed">
+                  모든 자산을 하나의 대시보드로 통합해 데이터 기반으로 분석하고,
+                  목표에 맞는 전략을 제안합니다.
                 </p>
               </div>
 
-              {/* 주요 기능 */}
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+              {/* 그래프 및 차트 섹션 */}
+              <div className="mb-12 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* 자산 추이 그래프 (더미 데이터) */}
+                <div className="px-4">
+                  <div className="flex items-center justify-between mb-0">
+                    <div>
+                      <h3 className="text-slate-900 font-semibold text-lg mb-0">
+                        월별 자산 성장 추이
+                      </h3>
+                      <p className="text-slate-500 text-sm">
+                        지난 12개월 성장률
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div
+                        className="text-2xl font-bold"
+                        style={{ color: "#2ED896" }}
+                      >
+                        +24.8%
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        전월 대비 증가
+                      </div>
+                    </div>
+                  </div>
+                  <div className="relative" style={{ height: "180px" }}>
                     <svg
-                      className="w-5 h-5 text-white"
+                      width="120%"
+                      height="100%"
+                      viewBox="0 0 600 320"
+                      className="overflow-visible -translate-x-[10%]"
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      {/* 그리드 라인 */}
+                      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                        <line
+                          key={i}
+                          x1="40"
+                          y1={32 + i * 40}
+                          x2="580"
+                          y2={32 + i * 40}
+                          stroke="rgba(0,0,0,0.1)"
+                          strokeWidth="1"
+                        />
+                      ))}
+                      {/* 월별 라벨 */}
+                      {[
+                        "1월",
+                        "2월",
+                        "3월",
+                        "4월",
+                        "5월",
+                        "6월",
+                        "7월",
+                        "8월",
+                        "9월",
+                        "10월",
+                        "11월",
+                        "12월",
+                      ].map((month, i) => (
+                        <text
+                          key={i}
+                          x={60 + i * 45}
+                          y={308}
+                          fill="rgba(0,0,0,0.6)"
+                          fontSize="20"
+                          textAnchor="middle"
+                        >
+                          {month}
+                        </text>
+                      ))}
+                      {/* 라인 차트 */}
+                      <polyline
+                        points="60,240 105,220 150,200 195,170 240,150 285,135 330,115 375,100 420,85 465,70 510,60 555,50"
+                        fill="none"
+                        stroke="#00FF9C"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      {/* 영역 채우기 */}
+                      <defs>
+                        <linearGradient
+                          id="areaGradient"
+                          x1="0%"
+                          y1="0%"
+                          x2="0%"
+                          y2="100%"
+                        >
+                          <stop
+                            offset="0%"
+                            stopColor="rgba(0, 255, 156, 0.3)"
+                          />
+                          <stop
+                            offset="100%"
+                            stopColor="rgba(0, 255, 156, 0)"
+                          />
+                        </linearGradient>
+                      </defs>
+                      <polygon
+                        points="60,240 105,220 150,200 195,170 240,150 285,135 330,115 375,100 420,85 465,70 510,60 555,50 555,320 60,320"
+                        fill="url(#areaGradient)"
+                      />
+                      {/* 데이터 포인트 */}
+                      {[
+                        240, 220, 200, 170, 150, 135, 115, 100, 85, 70, 60, 50,
+                      ].map((y, i) => (
+                        <circle
+                          key={i}
+                          cx={60 + i * 45}
+                          cy={y}
+                          r="4"
+                          fill="#00FF9C"
+                          className="hover:r-6 transition-all"
+                        />
+                      ))}
+                    </svg>
+                  </div>
+                </div>
+
+                {/* 자산 구성 차트 */}
+                <div className="px-4 flex flex-col">
+                  <h3 className="text-slate-900 font-semibold text-lg mb-0">
+                    자산 구성 현황
+                  </h3>
+                  <div className="flex items-center gap-6 mt-12">
+                    {/* 도넛 차트 */}
+                    <div className="relative w-32 h-32">
+                      <svg width="128" height="128" viewBox="0 0 128 128">
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r="56"
+                          fill="none"
+                          stroke="#e2e8f0"
+                          strokeWidth="12"
+                        />
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r="56"
+                          fill="none"
+                          stroke="#0065F8"
+                          strokeWidth="12"
+                          strokeDasharray={`${2 * Math.PI * 56 * 0.45} ${
+                            2 * Math.PI * 56
+                          }`}
+                          strokeDashoffset={2 * Math.PI * 56 * 0.25}
+                          transform="rotate(-90 64 64)"
+                        />
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r="56"
+                          fill="none"
+                          stroke="#00CAFF"
+                          strokeWidth="12"
+                          strokeDasharray={`${2 * Math.PI * 56 * 0.3} ${
+                            2 * Math.PI * 56
+                          }`}
+                          strokeDashoffset={2 * Math.PI * 56 * 0.7}
+                          transform="rotate(-90 64 64)"
+                        />
+                        <circle
+                          cx="64"
+                          cy="64"
+                          r="56"
+                          fill="none"
+                          stroke="#00FFDE"
+                          strokeWidth="12"
+                          strokeDasharray={`${2 * Math.PI * 56 * 0.25} ${
+                            2 * Math.PI * 56
+                          }`}
+                          strokeDashoffset={2 * Math.PI * 56 * 0.975}
+                          transform="rotate(-90 64 64)"
+                        />
+                        <text
+                          x="64"
+                          y="70"
+                          fill="#1e293b"
+                          fontSize="16"
+                          fontWeight="bold"
+                          textAnchor="middle"
+                        >
+                          총 자산
+                        </text>
+                        <text
+                          x="64"
+                          y="85"
+                          fill="#64748b"
+                          fontSize="12"
+                          textAnchor="middle"
+                        >
+                          2.4억원
+                        </text>
+                      </svg>
+                    </div>
+                    {/* 범례 */}
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: "#0065F8" }}
+                        ></div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-slate-900">
+                            예금/적금
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            45% · 1억 800만원
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: "#00CAFF" }}
+                        ></div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-slate-900">
+                            투자
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            30% · 7,200만원
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: "#00FFDE" }}
+                        ></div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-slate-900">
+                            기타
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            25% · 6,000만원
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 주요 기능 */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg
+                      className="w-6 h-6 text-slate-800"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -881,24 +1128,50 @@ export default function Home() {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                       />
                     </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-slate-800 mb-1">
-                      실시간 자산 현황
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      간단한 자산 기록
                     </h3>
-                    <p className="text-sm text-slate-600">
-                      현금, 투자, 총 자산을 한눈에 파악
-                    </p>
                   </div>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    복잡한 절차 없이 자산을 쉽고 간단하게
+                    {/* <br /> */}
+                    기록하여 관리할 수 있습니다
+                  </p>
                 </div>
 
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
                     <svg
-                      className="w-5 h-5 text-white"
+                      className="w-6 h-6 text-slate-800"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                      />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      목표 달성 지원
+                    </h3>
+                  </div>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    목표 금액을 설정하고 필요한 금액을 모으기 위해
+                    {/* <br /> */}
+                    체계적으로 도와드립니다
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg
+                      className="w-6 h-6 text-slate-800"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -910,41 +1183,15 @@ export default function Home() {
                         d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
                       />
                     </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-slate-800 mb-1">
-                      투자 성과 분석
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      통계 데이터 시각화
                     </h3>
-                    <p className="text-sm text-slate-600">
-                      포트폴리오 성과를 상세히 분석하고 추적
-                    </p>
                   </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                    <svg
-                      className="w-5 h-5 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-slate-800 mb-1">
-                      안전한 데이터 관리
-                    </h3>
-                    <p className="text-sm text-slate-600">
-                      암호화된 데이터 저장으로 개인정보 보호
-                    </p>
-                  </div>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    자산에 대한 통계 데이터를 그래프로 제공하여
+                    {/* <br /> */}
+                    한눈에 파악하고 분석할 수 있습니다
+                  </p>
                 </div>
               </div>
             </div>
