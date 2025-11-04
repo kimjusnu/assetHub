@@ -191,7 +191,7 @@ export default function LoginForm() {
         <p className="text-sm text-slate-600">
           {isSignUp
             ? "새로운 계정을 만들어보세요"
-            : "자산 포트폴리오에 오신 것을 환영합니다"}
+            : "AssetHub에 오신 것을 환영합니다"}
         </p>
       </div>
 

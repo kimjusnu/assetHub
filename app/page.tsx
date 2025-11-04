@@ -36,12 +36,126 @@ export default function Home() {
    * 로그인하지 않은 사용자용 UI
    *
    * user가 null이면 로그인하지 않은 상태이므로
-   * 로그인 폼을 표시합니다.
+   * 서비스 소개와 로그인 폼을 함께 표시합니다.
    */
   if (!user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-        <LoginForm />
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        {/* 헤더 - 전체 너비 */}
+        <header className="w-full bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-4 shadow-sm">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-xl sm:text-2xl font-semibold text-slate-800">
+              AssetHub
+            </h1>
+          </div>
+        </header>
+
+        {/* 메인 컨텐츠 */}
+        <div className="flex-1 flex flex-col lg:flex-row">
+          {/* 왼쪽: 서비스 소개 */}
+          <div className="flex-1 flex items-center justify-center p-8 lg:p-12 bg-white lg:bg-slate-50">
+            <div className="max-w-md mx-auto lg:mx-0">
+              <div className="mb-8">
+                <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
+                  AssetHub
+                </h1>
+                <p className="text-lg text-slate-600 mb-6">
+                  개인 자산을 체계적으로 관리하고
+                  <br />
+                  투자 성과를 한눈에 확인하세요
+                </p>
+              </div>
+
+              {/* 주요 기능 */}
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <svg
+                      className="w-5 h-5 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800 mb-1">
+                      실시간 자산 현황
+                    </h3>
+                    <p className="text-sm text-slate-600">
+                      현금, 투자, 총 자산을 한눈에 파악
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <svg
+                      className="w-5 h-5 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800 mb-1">
+                      투자 성과 분석
+                    </h3>
+                    <p className="text-sm text-slate-600">
+                      포트폴리오 성과를 상세히 분석하고 추적
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <svg
+                      className="w-5 h-5 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800 mb-1">
+                      안전한 데이터 관리
+                    </h3>
+                    <p className="text-sm text-slate-600">
+                      암호화된 데이터 저장으로 개인정보 보호
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 오른쪽: 로그인 폼 */}
+          <div className="flex-1 flex items-center justify-center p-4 lg:p-8 lg:bg-white">
+            <div className="w-full max-w-md">
+              <LoginForm />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -60,7 +174,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl font-semibold text-slate-800">
-                자산 포트폴리오
+                AssetHub
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
                 개인 자산을 효율적으로 관리하세요
