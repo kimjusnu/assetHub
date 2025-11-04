@@ -101,6 +101,11 @@ export default function Home() {
     Record<string, Record<string, number>>
   >({});
 
+  // 선택된 연도 상태
+  const [selectedYear, setSelectedYear] = useState<string>(
+    String(new Date().getFullYear())
+  );
+
   // 자산 데이터 로드
   useEffect(() => {
     const loadAssets = async () => {
@@ -238,15 +243,49 @@ export default function Home() {
     }
   }, [openMenu]);
 
-  // 삭제 버튼 클릭 시 바로 삭제
-  const handleDelete = (category: AssetCategory, productId: string) => {
-    setAssets({
+  // 삭제 버튼 클릭 시 바로 삭제 및 DB 저장
+  const handleDelete = async (category: AssetCategory, productId: string) => {
+    // 상태에서 먼저 제거 (즉시 UI 반영)
+    const updatedAssets = {
       ...assets,
       [category]: assets[category].filter(
         (product) => product.id !== productId
       ),
-    });
+    };
+    setAssets(updatedAssets);
     closeMenu();
+
+    // DB에 즉시 저장
+    try {
+      if (!user) {
+        throw new Error("로그인이 필요합니다.");
+      }
+
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+      const existingData = userDoc.exists() ? userDoc.data() : {};
+
+      await setDoc(
+        userDocRef,
+        {
+          ...existingData,
+          assets: {
+            depositSavings: updatedAssets.depositSavings,
+            trustISA: updatedAssets.trustISA,
+            insurance: updatedAssets.insurance,
+            pension: updatedAssets.pension,
+            investment: updatedAssets.investment,
+          },
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (err: any) {
+      console.error("삭제 저장 실패:", err);
+      setError("삭제 저장에 실패했습니다.");
+      // 실패 시 원래 상태로 복구
+      setAssets(assets);
+    }
   };
 
   // 메모 입력 시작
@@ -1155,43 +1194,345 @@ export default function Home() {
 
               {/* 오른쪽 위: 월별 자산 추이 */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">
-                  월별 자산 추이
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-slate-800">
+                    월별 자산 추이
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleSaveMonthlyTrends}
+                    disabled={isSaving}
+                    className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
+                  >
+                    저장
+                  </button>
+                </div>
                 <p className="text-sm text-slate-500 mb-4">
                   각 자산별 월별 금액을 입력하세요
                 </p>
-                {/* TODO: 월별 자산 추이 폼 구현 */}
-                <div className="text-center py-8 text-slate-400 text-sm">
-                  준비 중...
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {/* 모든 자산 상품 목록 가져오기 */}
+                  {(() => {
+                    const allProducts: Array<{ name: string }> = [];
+                    (Object.keys(categoryLabels) as AssetCategory[]).forEach(
+                      (category) => {
+                        assets[category].forEach((product) => {
+                          if (product.name && product.name.trim() !== "") {
+                            allProducts.push({ name: product.name });
+                          }
+                        });
+                      }
+                    );
+
+                    if (allProducts.length === 0) {
+                      return (
+                        <p className="text-xs text-slate-400 text-center py-4">
+                          자산 현황에서 상품을 먼저 등록해주세요.
+                        </p>
+                      );
+                    }
+
+                    // 현재 연도와 월 목록 생성 (최근 6개월)
+                    const months: string[] = [];
+                    const now = new Date();
+                    for (let i = 5; i >= 0; i--) {
+                      const date = new Date(
+                        now.getFullYear(),
+                        now.getMonth() - i,
+                        1
+                      );
+                      const year = date.getFullYear();
+                      const month = String(date.getMonth() + 1).padStart(
+                        2,
+                        "0"
+                      );
+                      months.push(`${year}-${month}`);
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {allProducts.map((product) => {
+                          const assetName = product.name;
+                          const trends = monthlyTrends[assetName] || {};
+
+                          return (
+                            <div
+                              key={assetName}
+                              className="p-2 bg-slate-50 rounded border border-slate-200"
+                            >
+                              <div className="text-xs font-medium text-slate-700 mb-2">
+                                {assetName}
+                              </div>
+                              <div className="grid grid-cols-3 gap-1">
+                                {months.map((month) => {
+                                  const monthKey = month;
+                                  const value = trends[monthKey] || 0;
+
+                                  return (
+                                    <div key={monthKey} className="space-y-0.5">
+                                      <label className="text-xs text-slate-600">
+                                        {month.replace("-", ".")}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={value ? formatNumber(value) : ""}
+                                        onChange={(e) => {
+                                          const numericValue =
+                                            e.target.value.replace(
+                                              /[^0-9]/g,
+                                              ""
+                                            );
+                                          const amount = numericValue
+                                            ? Number(numericValue)
+                                            : 0;
+
+                                          setMonthlyTrends({
+                                            ...monthlyTrends,
+                                            [assetName]: {
+                                              ...trends,
+                                              [monthKey]: amount,
+                                            },
+                                          });
+                                        }}
+                                        disabled={isSaving}
+                                        placeholder="0"
+                                        className="w-full px-1.5 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
               {/* 왼쪽 아래: 월별 가용 계획 */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">
-                  월별 가용 계획
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-slate-800">
+                    월별 가용 계획
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleSaveMonthlyPlans}
+                    disabled={isSaving}
+                    className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
+                  >
+                    저장
+                  </button>
+                </div>
                 <p className="text-sm text-slate-500 mb-4">
                   매월 어떻게 돈을 쓸지 계획하세요
                 </p>
-                {/* TODO: 월별 가용 계획 폼 구현 */}
-                <div className="text-center py-8 text-slate-400 text-sm">
-                  준비 중...
+                <div className="space-y-2">
+                  {[
+                    { key: "청년도약", label: "청년도약" },
+                    { key: "주택청약", label: "주택청약" },
+                    { key: "IRP", label: "IRP" },
+                    { key: "ISA", label: "ISA" },
+                    { key: "토스굴비적금", label: "토스굴비적금" },
+                  ].map((item) => {
+                    const value = monthlyPlans[item.key] || 0;
+
+                    return (
+                      <div
+                        key={item.key}
+                        className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200"
+                      >
+                        <label className="text-xs font-medium text-slate-700">
+                          {item.label}
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={value ? formatNumber(value) : ""}
+                            onChange={(e) => {
+                              const numericValue = e.target.value.replace(
+                                /[^0-9]/g,
+                                ""
+                              );
+                              const amount = numericValue
+                                ? Number(numericValue)
+                                : 0;
+
+                              setMonthlyPlans({
+                                ...monthlyPlans,
+                                [item.key]: amount,
+                              });
+                            }}
+                            disabled={isSaving}
+                            placeholder="0"
+                            className="w-24 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
+                          />
+                          <span className="text-xs text-slate-500">원</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* 현금 섹션 */}
+                  <div className="mt-3 pt-3 border-t border-slate-200">
+                    <div className="text-xs font-medium text-slate-700 mb-2">
+                      현금
+                    </div>
+                    <div className="space-y-2">
+                      {[
+                        { key: "교통비", label: "교통비" },
+                        { key: "비상금(CMA)", label: "비상금(CMA)" },
+                        { key: "가용금", label: "가용금" },
+                      ].map((item) => {
+                        const value = monthlyPlans[item.key] || 0;
+
+                        return (
+                          <div
+                            key={item.key}
+                            className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200"
+                          >
+                            <label className="text-xs font-medium text-slate-700">
+                              {item.label}
+                            </label>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={value ? formatNumber(value) : ""}
+                                onChange={(e) => {
+                                  const numericValue = e.target.value.replace(
+                                    /[^0-9]/g,
+                                    ""
+                                  );
+                                  const amount = numericValue
+                                    ? Number(numericValue)
+                                    : 0;
+
+                                  setMonthlyPlans({
+                                    ...monthlyPlans,
+                                    [item.key]: amount,
+                                  });
+                                }}
+                                disabled={isSaving}
+                                placeholder="0"
+                                className="w-24 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
+                              />
+                              <span className="text-xs text-slate-500">원</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* 오른쪽 아래: 연도별 자산 추이 */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">
-                  연도별 자산 추이
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-slate-800">
+                    연도별 자산 추이
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {/* 연도 선택 */}
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(e.target.value)}
+                      disabled={isSaving}
+                      className="px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400"
+                    >
+                      {(() => {
+                        const years: string[] = [];
+                        const currentYear = new Date().getFullYear();
+                        for (let i = 5; i >= 0; i--) {
+                          years.push(String(currentYear - i));
+                        }
+                        return years.map((year) => (
+                          <option key={year} value={year}>
+                            {year}년
+                          </option>
+                        ));
+                      })()}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleSaveAnnualTrends}
+                      disabled={isSaving}
+                      className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
+                    >
+                      저장
+                    </button>
+                  </div>
+                </div>
                 <p className="text-sm text-slate-500 mb-4">
                   연도별 월별 총 자산 추이를 확인하세요
                 </p>
-                {/* TODO: 연도별 자산 추이 폼 구현 */}
-                <div className="text-center py-8 text-slate-400 text-sm">
-                  준비 중...
+                <div className="space-y-3">
+                  {(() => {
+                    const months = [
+                      "01",
+                      "02",
+                      "03",
+                      "04",
+                      "05",
+                      "06",
+                      "07",
+                      "08",
+                      "09",
+                      "10",
+                      "11",
+                      "12",
+                    ];
+
+                    const yearTrends = annualTrends[selectedYear] || {};
+
+                    return (
+                      <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                        <div className="text-xs font-medium text-slate-700 mb-2">
+                          {selectedYear}년도
+                        </div>
+                        <div className="grid grid-cols-4 gap-1">
+                          {months.map((month) => {
+                            const monthKey = month;
+                            const value = yearTrends[monthKey] || 0;
+
+                            return (
+                              <div key={monthKey} className="space-y-0.5">
+                                <label className="text-xs text-slate-600">
+                                  {month}월
+                                </label>
+                                <input
+                                  type="text"
+                                  value={value ? formatNumber(value) : ""}
+                                  onChange={(e) => {
+                                    const numericValue = e.target.value.replace(
+                                      /[^0-9]/g,
+                                      ""
+                                    );
+                                    const amount = numericValue
+                                      ? Number(numericValue)
+                                      : 0;
+
+                                    setAnnualTrends({
+                                      ...annualTrends,
+                                      [selectedYear]: {
+                                        ...yearTrends,
+                                        [monthKey]: amount,
+                                      },
+                                    });
+                                  }}
+                                  disabled={isSaving}
+                                  placeholder="0"
+                                  className="w-full px-1.5 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
