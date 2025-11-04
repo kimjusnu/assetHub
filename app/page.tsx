@@ -44,8 +44,11 @@ export default function Home() {
         {/* 헤더 - 전체 너비 */}
         <header className="w-full bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-4 shadow-sm">
           <div className="max-w-7xl mx-auto">
-            <h1 className="text-xl sm:text-2xl font-semibold text-slate-800">
-              AssetHub
+            <h1
+              className="text-xl sm:text-2xl font-semibold text-slate-800"
+              style={{ fontFamily: "'YesMyungjo', sans-serif" }}
+            >
+              Asset Hub
             </h1>
           </div>
         </header>
@@ -173,8 +176,11 @@ export default function Home() {
         <header className="bg-white rounded-lg border border-slate-200 p-4 sm:p-6 mb-4 sm:mb-6 shadow-sm">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
             <div>
-              <h1 className="text-xl sm:text-2xl font-semibold text-slate-800">
-                AssetHub
+              <h1
+                className="text-xl sm:text-2xl font-semibold text-slate-800"
+                style={{ fontFamily: "'YesMyungjo', sans-serif" }}
+              >
+                Asset Hub
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
                 개인 자산을 효율적으로 관리하세요

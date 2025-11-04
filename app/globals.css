@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* YesMyungjo 폰트 정의 (로고용) */
+@font-face {
+  font-family: 'YesMyungjo';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_13@1.0/YESMyoungjo-Regular.woff') format('woff');
+  font-weight: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'YesMyungjo';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_13@1.0/YESMyoungjo-Bold.woff') format('woff');
+  font-weight: 700;
+  font-display: swap;
+}
+
 /* Suit 폰트 정의 */
 @font-face {
   font-family: 'Suit';
