@@ -92,8 +92,22 @@ export default function Home() {
   >({});
 
   // 월별 가용 계획 상태
-  // 예: { "청년도약": 700000, "주택청약": 250000, ... }
-  const [monthlyPlans, setMonthlyPlans] = useState<Record<string, number>>({});
+  // 구조: { income: 수입, savings: [{ name: string, amount: number }], cash: [{ name: string, amount: number }] }
+  interface MonthlyPlanItem {
+    id: string;
+    name: string;
+    amount: number;
+  }
+
+  const [monthlyPlans, setMonthlyPlans] = useState<{
+    income: number;
+    savings: MonthlyPlanItem[];
+    cash: MonthlyPlanItem[];
+  }>({
+    income: 0,
+    savings: [],
+    cash: [],
+  });
 
   // 연도별 자산 추이 상태
   // 예: { "2025": { "01": 23500000, "02": 23800000, ... } }
@@ -153,7 +167,53 @@ export default function Home() {
 
           // 월별 가용 계획 로드
           if (userData.monthlyPlans) {
-            setMonthlyPlans(userData.monthlyPlans || {});
+            // 구버전 호환: Record<string, number> 형태도 처리
+            if (userData.monthlyPlans.income !== undefined) {
+              setMonthlyPlans({
+                income: userData.monthlyPlans.income || 0,
+                savings: userData.monthlyPlans.savings || [],
+                cash: userData.monthlyPlans.cash || [],
+              });
+            } else {
+              // 구버전 데이터 변환
+              const oldPlans = userData.monthlyPlans as Record<string, number>;
+              const savings: MonthlyPlanItem[] = [];
+              const cash: MonthlyPlanItem[] = [];
+
+              Object.entries(oldPlans).forEach(([key, amount]) => {
+                if (
+                  [
+                    "청년도약",
+                    "주택청약",
+                    "IRP",
+                    "ISA",
+                    "토스굴비적금",
+                  ].includes(key)
+                ) {
+                  savings.push({
+                    id:
+                      Date.now().toString() +
+                      Math.random().toString(36).substr(2, 9),
+                    name: key,
+                    amount,
+                  });
+                } else if (["교통비", "비상금(CMA)", "가용금"].includes(key)) {
+                  cash.push({
+                    id:
+                      Date.now().toString() +
+                      Math.random().toString(36).substr(2, 9),
+                    name: key,
+                    amount,
+                  });
+                }
+              });
+
+              setMonthlyPlans({
+                income: 0,
+                savings,
+                cash,
+              });
+            }
           }
 
           // 연도별 자산 추이 로드
@@ -412,6 +472,51 @@ export default function Home() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // 월별 가용 계획 항목 추가
+  const addMonthlyPlanItem = (type: "savings" | "cash") => {
+    const newItem: MonthlyPlanItem = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      name: "",
+      amount: 0,
+    };
+
+    setMonthlyPlans({
+      ...monthlyPlans,
+      [type]: [...monthlyPlans[type], newItem],
+    });
+  };
+
+  // 월별 가용 계획 항목 수정
+  const updateMonthlyPlanItem = (
+    type: "savings" | "cash",
+    id: string,
+    updates: Partial<MonthlyPlanItem>
+  ) => {
+    setMonthlyPlans({
+      ...monthlyPlans,
+      [type]: monthlyPlans[type].map((item) =>
+        item.id === id ? { ...item, ...updates } : item
+      ),
+    });
+  };
+
+  // 월별 가용 계획 항목 삭제
+  const deleteMonthlyPlanItem = (type: "savings" | "cash", id: string) => {
+    setMonthlyPlans({
+      ...monthlyPlans,
+      [type]: monthlyPlans[type].filter((item) => item.id !== id),
+    });
+  };
+
+  // 가용금액 계산 (수입 - 저축 항목 합계)
+  const calculateAvailableAmount = (): number => {
+    const savingsTotal = monthlyPlans.savings.reduce(
+      (sum, item) => sum + (item.amount || 0),
+      0
+    );
+    return Math.max(0, monthlyPlans.income - savingsTotal);
   };
 
   // 월별 가용 계획 저장 핸들러
@@ -1327,103 +1432,239 @@ export default function Home() {
                   </button>
                 </div>
                 <p className="text-sm text-slate-500 mb-4">
-                  매월 어떻게 돈을 쓸지 계획하세요
+                  월 수입과 저축 계획을 입력하세요
                 </p>
-                <div className="space-y-2">
-                  {[
-                    { key: "청년도약", label: "청년도약" },
-                    { key: "주택청약", label: "주택청약" },
-                    { key: "IRP", label: "IRP" },
-                    { key: "ISA", label: "ISA" },
-                    { key: "토스굴비적금", label: "토스굴비적금" },
-                  ].map((item) => {
-                    const value = monthlyPlans[item.key] || 0;
 
-                    return (
-                      <div
-                        key={item.key}
-                        className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200"
-                      >
-                        <label className="text-xs font-medium text-slate-700">
-                          {item.label}
-                        </label>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            value={value ? formatNumber(value) : ""}
-                            onChange={(e) => {
-                              const numericValue = e.target.value.replace(
-                                /[^0-9]/g,
-                                ""
-                              );
-                              const amount = numericValue
-                                ? Number(numericValue)
-                                : 0;
-
-                              setMonthlyPlans({
-                                ...monthlyPlans,
-                                [item.key]: amount,
-                              });
-                            }}
-                            disabled={isSaving}
-                            placeholder="0"
-                            className="w-24 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
-                          />
-                          <span className="text-xs text-slate-500">원</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* 현금 섹션 */}
-                  <div className="mt-3 pt-3 border-t border-slate-200">
-                    <div className="text-xs font-medium text-slate-700 mb-2">
-                      현금
-                    </div>
-                    <div className="space-y-2">
-                      {[
-                        { key: "교통비", label: "교통비" },
-                        { key: "비상금(CMA)", label: "비상금(CMA)" },
-                        { key: "가용금", label: "가용금" },
-                      ].map((item) => {
-                        const value = monthlyPlans[item.key] || 0;
-
-                        return (
-                          <div
-                            key={item.key}
-                            className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200"
-                          >
-                            <label className="text-xs font-medium text-slate-700">
-                              {item.label}
-                            </label>
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="text"
-                                value={value ? formatNumber(value) : ""}
-                                onChange={(e) => {
-                                  const numericValue = e.target.value.replace(
-                                    /[^0-9]/g,
-                                    ""
-                                  );
-                                  const amount = numericValue
-                                    ? Number(numericValue)
-                                    : 0;
-
-                                  setMonthlyPlans({
-                                    ...monthlyPlans,
-                                    [item.key]: amount,
-                                  });
-                                }}
-                                disabled={isSaving}
-                                placeholder="0"
-                                className="w-24 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
-                              />
-                              <span className="text-xs text-slate-500">원</span>
-                            </div>
-                          </div>
+                {/* 수입 입력 */}
+                <div className="mb-4 p-3 bg-slate-50 rounded border border-slate-200">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                    월 수입
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={
+                        monthlyPlans.income
+                          ? formatNumber(monthlyPlans.income)
+                          : ""
+                      }
+                      onChange={(e) => {
+                        const numericValue = e.target.value.replace(
+                          /[^0-9]/g,
+                          ""
                         );
-                      })}
-                    </div>
+                        const amount = numericValue ? Number(numericValue) : 0;
+                        setMonthlyPlans({
+                          ...monthlyPlans,
+                          income: amount,
+                        });
+                      }}
+                      disabled={isSaving}
+                      placeholder="0"
+                      className="flex-1 px-2 py-1.5 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8 text-right"
+                    />
+                    <span className="text-xs text-slate-500">원</span>
+                  </div>
+                </div>
+
+                {/* 저축 섹션 */}
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-semibold text-slate-700">
+                      저축 항목
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => addMonthlyPlanItem("savings")}
+                      disabled={isSaving}
+                      className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                        />
+                      </svg>
+                      추가
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {monthlyPlans.savings.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-2">
+                        저축 항목이 없습니다. 추가 버튼을 클릭하세요.
+                      </p>
+                    ) : (
+                      monthlyPlans.savings.map((item) => (
+                        <div
+                          key={item.id}
+                          className="p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5"
+                        >
+                          <div className="grid grid-cols-[1fr_auto] gap-2">
+                            <input
+                              type="text"
+                              placeholder="항목명 (예: 청년도약)"
+                              value={item.name}
+                              onChange={(e) =>
+                                updateMonthlyPlanItem("savings", item.id, {
+                                  name: e.target.value,
+                                })
+                              }
+                              disabled={isSaving}
+                              className="px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteMonthlyPlanItem("savings", item.id)
+                              }
+                              disabled={isSaving}
+                              className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder="금액"
+                              value={
+                                item.amount ? formatNumber(item.amount) : ""
+                              }
+                              onChange={(e) => {
+                                const numericValue = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  ""
+                                );
+                                const amount = numericValue
+                                  ? Number(numericValue)
+                                  : 0;
+                                updateMonthlyPlanItem("savings", item.id, {
+                                  amount,
+                                });
+                              }}
+                              disabled={isSaving}
+                              className="flex-1 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
+                            />
+                            <span className="text-xs text-slate-500">원</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* 가용금액 자동 계산 표시 */}
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <div className="flex items-center justify-between p-3 bg-slate-100 rounded border border-slate-300">
+                    <span className="text-sm font-semibold text-slate-800">
+                      가용금액
+                    </span>
+                    <span className="text-base font-bold text-slate-900">
+                      {formatNumber(calculateAvailableAmount())}원
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    (수입 - 저축 합계)
+                  </p>
+                </div>
+
+                {/* 현금 섹션 (선택사항) */}
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-semibold text-slate-700">
+                      현금 항목
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => addMonthlyPlanItem("cash")}
+                      disabled={isSaving}
+                      className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                        />
+                      </svg>
+                      추가
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {monthlyPlans.cash.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-2">
+                        현금 항목이 없습니다. 추가 버튼을 클릭하세요.
+                      </p>
+                    ) : (
+                      monthlyPlans.cash.map((item) => (
+                        <div
+                          key={item.id}
+                          className="p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5"
+                        >
+                          <div className="grid grid-cols-[1fr_auto] gap-2">
+                            <input
+                              type="text"
+                              placeholder="항목명 (예: 교통비)"
+                              value={item.name}
+                              onChange={(e) =>
+                                updateMonthlyPlanItem("cash", item.id, {
+                                  name: e.target.value,
+                                })
+                              }
+                              disabled={isSaving}
+                              className="px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteMonthlyPlanItem("cash", item.id)
+                              }
+                              disabled={isSaving}
+                              className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder="금액"
+                              value={
+                                item.amount ? formatNumber(item.amount) : ""
+                              }
+                              onChange={(e) => {
+                                const numericValue = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  ""
+                                );
+                                const amount = numericValue
+                                  ? Number(numericValue)
+                                  : 0;
+                                updateMonthlyPlanItem("cash", item.id, {
+                                  amount,
+                                });
+                              }}
+                              disabled={isSaving}
+                              className="flex-1 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
+                            />
+                            <span className="text-xs text-slate-500">원</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
