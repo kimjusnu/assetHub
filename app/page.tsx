@@ -17,7 +17,31 @@ import { db } from "@/lib/firebase";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { ko } from "date-fns/locale";
-import { MoreVertical, FileText, Trash2 } from "lucide-react";
+import {
+  MoreVertical,
+  FileText,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+} from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 export default function Home() {
   // useAuth 훅을 사용하여 현재 로그인 상태와 로그아웃 함수를 가져옵니다
@@ -67,6 +91,25 @@ export default function Home() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // 카테고리 접기/펼치기 상태
+  const [expandedCategories, setExpandedCategories] = useState<
+    Record<AssetCategory, boolean>
+  >({
+    depositSavings: false,
+    trustISA: false,
+    insurance: false,
+    pension: false,
+    investment: false,
+  });
+
+  // 카테고리 토글 함수
+  const toggleCategory = (category: AssetCategory) => {
+    setExpandedCategories({
+      ...expandedCategories,
+      [category]: !expandedCategories[category],
+    });
+  };
+
   // 메뉴 열림 상태
   const [openMenu, setOpenMenu] = useState<{
     category: AssetCategory | null;
@@ -86,10 +129,14 @@ export default function Home() {
   });
 
   // 월별 자산 추이 상태
-  // 예: { "수협 예금": { "2025-08": 11700000, "2025-09": 11700000, ... } }
+  // 각 자산 항목별 월별 저축액 변화를 저장
+  // 예: { "수협 예금": { "2025-08": 500000 (저축액), "2025-09": -100000 (인출액), ... } }
   const [monthlyTrends, setMonthlyTrends] = useState<
     Record<string, Record<string, number>>
   >({});
+
+  // 월별 자산 추이에서 자산 순서 관리
+  const [monthlyTrendsOrder, setMonthlyTrendsOrder] = useState<string[]>([]);
 
   // 월별 가용 계획 상태
   // 구조: { income: 수입, savings: [{ name: string, amount: number }], cash: [{ name: string, amount: number }] }
@@ -163,6 +210,11 @@ export default function Home() {
           // 월별 자산 추이 로드
           if (userData.monthlyTrends) {
             setMonthlyTrends(userData.monthlyTrends || {});
+          }
+
+          // 월별 자산 추이 순서 로드
+          if (userData.monthlyTrendsOrder) {
+            setMonthlyTrendsOrder(userData.monthlyTrendsOrder || []);
           }
 
           // 월별 가용 계획 로드
@@ -459,6 +511,7 @@ export default function Home() {
         {
           ...existingData,
           monthlyTrends,
+          monthlyTrendsOrder,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
@@ -474,7 +527,145 @@ export default function Home() {
     }
   };
 
-  // 월별 가용 계획 항목 추가
+  // 드래그 앤 드롭 센서 설정
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // 월별 자산 추이 드래그 종료 핸들러
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = monthlyTrendsOrder.indexOf(active.id as string);
+      const newIndex = monthlyTrendsOrder.indexOf(over.id as string);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        setMonthlyTrendsOrder(
+          arrayMove(monthlyTrendsOrder, oldIndex, newIndex)
+        );
+      }
+    }
+  };
+
+  // SortableRow 컴포넌트
+  interface SortableRowProps {
+    product: {
+      name: string;
+      category: AssetCategory;
+      uniqueKey: string;
+    };
+    trends: Record<string, number>;
+    maturityDate?: string;
+    months: string[];
+    assets: typeof assets;
+    monthlyTrends: typeof monthlyTrends;
+    setMonthlyTrends: (trends: typeof monthlyTrends) => void;
+    isSaving: boolean;
+    formatNumber: (num: number) => string;
+  }
+
+  const SortableRow = ({
+    product,
+    trends,
+    maturityDate,
+    months,
+    assets,
+    monthlyTrends,
+    setMonthlyTrends,
+    isSaving,
+    formatNumber,
+  }: SortableRowProps) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: product.uniqueKey });
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    };
+
+    // 만기일 포맷팅
+    const formatMaturityDate = (dateStr?: string) => {
+      if (!dateStr) return "-";
+      try {
+        const date = new Date(dateStr);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}.${month}.${day}`;
+      } catch {
+        return "-";
+      }
+    };
+
+    return (
+      <tr ref={setNodeRef} style={style} className="hover:bg-slate-50">
+        <td className="border border-slate-200 px-2 py-2 text-xs font-medium text-slate-700 bg-slate-50">
+          <div className="flex items-center gap-2">
+            <div
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing touch-none"
+            >
+              <GripVertical className="w-4 h-4 text-slate-400" />
+            </div>
+            <div>{product.name}</div>
+          </div>
+        </td>
+        <td className="border border-slate-200 px-2 py-2 text-xs text-slate-600 bg-slate-50">
+          {formatMaturityDate(maturityDate)}
+        </td>
+        {months.map((month) => {
+          const monthKey = month;
+          const changeAmount = trends[monthKey] || 0;
+
+          return (
+            <td key={monthKey} className="border border-slate-200 px-1 py-1">
+              <input
+                type="text"
+                placeholder="0"
+                value={
+                  changeAmount !== 0
+                    ? changeAmount > 0
+                      ? `+${formatNumber(changeAmount)}`
+                      : formatNumber(changeAmount)
+                    : ""
+                }
+                onChange={(e) => {
+                  let inputValue = e.target.value;
+                  const isNegative = inputValue.startsWith("-");
+                  const numericValue = inputValue.replace(/[^0-9]/g, "");
+                  const amount = numericValue ? Number(numericValue) : 0;
+
+                  const finalAmount = isNegative ? -amount : amount;
+
+                  setMonthlyTrends({
+                    ...monthlyTrends,
+                    [product.name]: {
+                      ...trends,
+                      [monthKey]: finalAmount,
+                    },
+                  });
+                }}
+                disabled={isSaving}
+                className="w-full px-1.5 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-center"
+              />
+            </td>
+          );
+        })}
+      </tr>
+    );
+  };
   const addMonthlyPlanItem = (type: "savings" | "cash") => {
     const newItem: MonthlyPlanItem = {
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -508,6 +699,38 @@ export default function Home() {
       ...monthlyPlans,
       [type]: monthlyPlans[type].filter((item) => item.id !== id),
     });
+  };
+
+  // 월별 자산 금액 계산 함수
+  // 자산의 현재 금액(assets에서 가져온 amount) + 해당 월까지의 저축액 변화 누적
+  const calculateMonthlyAssetAmount = (
+    assetName: string,
+    baseAmount: number,
+    targetMonth: string,
+    months: string[]
+  ): number => {
+    const trends = monthlyTrends[assetName] || {};
+    let total = baseAmount;
+
+    // targetMonth까지의 모든 저축액 변화를 누적
+    for (const month of months) {
+      if (trends[month]) {
+        total += trends[month];
+      }
+      if (month === targetMonth) break;
+    }
+
+    return total;
+  };
+
+  // 월별 저축액 변화량 계산 (이전 달 대비)
+  const calculateMonthlyChange = (
+    assetName: string,
+    month: string,
+    months: string[]
+  ): number => {
+    const trends = monthlyTrends[assetName] || {};
+    return trends[month] || 0;
   };
 
   // 가용금액 계산 (수입 - 저축 항목 합계)
@@ -966,9 +1189,22 @@ export default function Home() {
             <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* 왼쪽 위: 자산 입력 폼 */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">
-                  자산 현황
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-slate-800">
+                    자산 현황
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleSubmit(e);
+                    }}
+                    disabled={isSaving}
+                    className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
+                  >
+                    저장
+                  </button>
+                </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {/* 각 대분류별 섹션 */}
                   {(Object.keys(categoryLabels) as AssetCategory[]).map(
@@ -983,17 +1219,42 @@ export default function Home() {
                         >
                           {/* 대분류 헤더 */}
                           <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <h4 className="text-sm font-semibold text-slate-800">
-                                {categoryLabels[category]}
-                              </h4>
-                              <p className="text-xs text-slate-600 mt-0.5">
-                                총 {formatNumber(categoryTotal)}원
-                              </p>
-                            </div>
                             <button
                               type="button"
-                              onClick={() => addProduct(category)}
+                              onClick={() => toggleCategory(category)}
+                              className="flex items-center gap-2 flex-1 text-left hover:opacity-70 transition-opacity"
+                            >
+                              {expandedCategories[category] ? (
+                                <ChevronUp className="w-4 h-4 text-slate-600" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4 text-slate-600" />
+                              )}
+                              <div>
+                                <h4 className="text-sm font-semibold text-slate-800">
+                                  {categoryLabels[category]}
+                                </h4>
+                                <p className="text-xs text-slate-600 mt-0.5">
+                                  총 {formatNumber(categoryTotal)}원
+                                  {products.length > 0 && (
+                                    <span className="ml-1">
+                                      ({products.length}개)
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                addProduct(category);
+                                // 추가 시 자동으로 펼치기
+                                if (!expandedCategories[category]) {
+                                  setExpandedCategories({
+                                    ...expandedCategories,
+                                    [category]: true,
+                                  });
+                                }
+                              }}
                               disabled={isSaving}
                               className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1"
                             >
@@ -1014,132 +1275,241 @@ export default function Home() {
                             </button>
                           </div>
 
-                          {/* 상품 목록 */}
-                          <div className="space-y-2">
-                            {products.length === 0 ? (
-                              <p className="text-xs text-slate-400 text-center py-2">
-                                등록된 상품이 없습니다.
-                              </p>
-                            ) : (
-                              products.map((product) => {
-                                const maturityDate = product.maturityDate
-                                  ? new Date(product.maturityDate)
-                                  : null;
+                          {/* 상품 목록 (접기/펼치기) */}
+                          {expandedCategories[category] && (
+                            <div className="space-y-2">
+                              {products.length === 0 ? (
+                                <p className="text-xs text-slate-400 text-center py-2">
+                                  등록된 상품이 없습니다.
+                                </p>
+                              ) : (
+                                products.map((product) => {
+                                  const maturityDate = product.maturityDate
+                                    ? new Date(product.maturityDate)
+                                    : null;
 
-                                return (
-                                  <div
-                                    key={product.id}
-                                    className="p-2 bg-slate-50 rounded border border-slate-200 space-y-2"
-                                  >
-                                    <div className="grid grid-cols-1 gap-2">
-                                      {/* 상품 이름 */}
-                                      <div>
-                                        <label className="block text-xs font-medium text-slate-700 mb-0.5">
-                                          상품 이름{" "}
-                                          <span className="text-red-500">
-                                            *
-                                          </span>
-                                        </label>
-                                        <input
-                                          type="text"
-                                          placeholder="예: 정기예금"
-                                          value={product.name}
-                                          onChange={(e) =>
-                                            updateProduct(
-                                              category,
-                                              product.id,
-                                              {
-                                                name: e.target.value,
-                                              }
-                                            )
-                                          }
-                                          disabled={isSaving}
-                                          required
-                                          className="w-full px-2 py-1.5 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8"
-                                        />
-                                      </div>
-
-                                      <div className="grid grid-cols-2 gap-2">
-                                        {/* 만기일 */}
+                                  return (
+                                    <div
+                                      key={product.id}
+                                      className="p-2 bg-slate-50 rounded border border-slate-200 space-y-2"
+                                    >
+                                      <div className="grid grid-cols-1 gap-2">
+                                        {/* 상품 이름 */}
                                         <div>
                                           <label className="block text-xs font-medium text-slate-700 mb-0.5">
-                                            만기일
+                                            상품 이름{" "}
+                                            <span className="text-red-500">
+                                              *
+                                            </span>
                                           </label>
-                                          <DatePicker
-                                            selected={maturityDate}
-                                            onChange={(date: Date | null) => {
+                                          <input
+                                            type="text"
+                                            placeholder="예: 정기예금"
+                                            value={product.name}
+                                            onChange={(e) =>
                                               updateProduct(
                                                 category,
                                                 product.id,
                                                 {
-                                                  maturityDate: date
-                                                    ? `${date.getFullYear()}-${String(
-                                                        date.getMonth() + 1
-                                                      ).padStart(
-                                                        2,
-                                                        "0"
-                                                      )}-${String(
-                                                        date.getDate()
-                                                      ).padStart(2, "0")}`
-                                                    : undefined,
+                                                  name: e.target.value,
                                                 }
-                                              );
-                                            }}
-                                            dateFormat="yy.MM.dd"
-                                            locale={ko}
-                                            placeholderText="만기일"
+                                              )
+                                            }
                                             disabled={isSaving}
-                                            className="w-full text-xs"
+                                            required
+                                            className="w-full px-2 py-1.5 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8"
                                           />
                                         </div>
 
-                                        {/* 예치금액 */}
-                                        <div>
-                                          <label className="block text-xs font-medium text-slate-700 mb-0.5">
-                                            금액(원)
-                                          </label>
-                                          <div className="relative">
-                                            <input
-                                              type="text"
-                                              placeholder="0"
-                                              value={
-                                                product.amount
-                                                  ? formatNumber(product.amount)
-                                                  : ""
-                                              }
-                                              onChange={(e) => {
-                                                const numericValue =
-                                                  e.target.value.replace(
-                                                    /[^0-9]/g,
-                                                    ""
-                                                  );
-                                                const amount = numericValue
-                                                  ? Number(numericValue)
-                                                  : 0;
+                                        <div className="grid grid-cols-2 gap-2">
+                                          {/* 만기일 */}
+                                          <div>
+                                            <label className="block text-xs font-medium text-slate-700 mb-0.5">
+                                              만기일
+                                            </label>
+                                            <DatePicker
+                                              selected={maturityDate}
+                                              onChange={(date: Date | null) => {
                                                 updateProduct(
                                                   category,
                                                   product.id,
                                                   {
-                                                    amount,
+                                                    maturityDate: date
+                                                      ? `${date.getFullYear()}-${String(
+                                                          date.getMonth() + 1
+                                                        ).padStart(
+                                                          2,
+                                                          "0"
+                                                        )}-${String(
+                                                          date.getDate()
+                                                        ).padStart(2, "0")}`
+                                                      : undefined,
                                                   }
                                                 );
                                               }}
+                                              dateFormat="yy.MM.dd"
+                                              locale={ko}
+                                              placeholderText="만기일"
                                               disabled={isSaving}
-                                              className="w-full px-2 py-1.5 pr-8 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8"
+                                              className="w-full text-xs"
                                             />
-                                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">
-                                              원
-                                            </span>
+                                          </div>
+
+                                          {/* 예치금액 */}
+                                          <div>
+                                            <label className="block text-xs font-medium text-slate-700 mb-0.5">
+                                              금액(원)
+                                            </label>
+                                            <div className="relative">
+                                              <input
+                                                type="text"
+                                                placeholder="0"
+                                                value={
+                                                  product.amount
+                                                    ? formatNumber(
+                                                        product.amount
+                                                      )
+                                                    : ""
+                                                }
+                                                onChange={(e) => {
+                                                  const numericValue =
+                                                    e.target.value.replace(
+                                                      /[^0-9]/g,
+                                                      ""
+                                                    );
+                                                  const amount = numericValue
+                                                    ? Number(numericValue)
+                                                    : 0;
+                                                  updateProduct(
+                                                    category,
+                                                    product.id,
+                                                    {
+                                                      amount,
+                                                    }
+                                                  );
+                                                }}
+                                                disabled={isSaving}
+                                                className="w-full px-2 py-1.5 pr-8 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8"
+                                              />
+                                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">
+                                                원
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* 더보기 버튼 */}
+                                        <div className="flex justify-end">
+                                          <div className="menu-container">
+                                            {openMenu.category === category &&
+                                            openMenu.productId ===
+                                              product.id ? (
+                                              <div className="flex gap-1 bg-white border border-slate-200 rounded shadow-lg p-1">
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    startMemoEdit(
+                                                      category,
+                                                      product.id
+                                                    )
+                                                  }
+                                                  disabled={isSaving}
+                                                  className="px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 rounded flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                  <FileText className="w-3 h-3" />
+                                                  메모
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    handleDelete(
+                                                      category,
+                                                      product.id
+                                                    )
+                                                  }
+                                                  disabled={isSaving}
+                                                  className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                  <Trash2 className="w-3 h-3" />
+                                                  삭제
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  toggleMenu(
+                                                    category,
+                                                    product.id
+                                                  )
+                                                }
+                                                disabled={isSaving}
+                                                className="px-1.5 py-1 text-slate-600 hover:bg-slate-100 rounded transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                              >
+                                                <MoreVertical className="w-4 h-4" />
+                                              </button>
+                                            )}
                                           </div>
                                         </div>
                                       </div>
 
-                                      {/* 더보기 버튼 */}
-                                      <div className="flex justify-end">
-                                        <div className="menu-container">
-                                          {openMenu.category === category &&
-                                          openMenu.productId === product.id ? (
-                                            <div className="flex gap-1 bg-white border border-slate-200 rounded shadow-lg p-1">
+                                      {/* 메모 입력/표시 영역 (간소화) */}
+                                      {editingMemo.category === category &&
+                                        editingMemo.productId ===
+                                          product.id && (
+                                          <div className="mt-2 p-2 bg-white border border-slate-200 rounded">
+                                            <textarea
+                                              placeholder="메모를 입력하세요"
+                                              value={product.memo || ""}
+                                              onChange={(e) =>
+                                                updateProduct(
+                                                  category,
+                                                  product.id,
+                                                  {
+                                                    memo: e.target.value,
+                                                  }
+                                                )
+                                              }
+                                              disabled={isSaving}
+                                              rows={2}
+                                              className="w-full px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 resize-none"
+                                            />
+                                            <div className="flex gap-1 mt-1">
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  saveMemo(
+                                                    category,
+                                                    product.id,
+                                                    product.memo || ""
+                                                  )
+                                                }
+                                                disabled={isSaving}
+                                                className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                              >
+                                                저장
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={cancelMemoEdit}
+                                                disabled={isSaving}
+                                                className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                              >
+                                                취소
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                      {!editingMemo.category &&
+                                        !editingMemo.productId &&
+                                        product.memo &&
+                                        product.memo.trim() !== "" && (
+                                          <div className="mt-2 p-2 bg-slate-50 border border-slate-200 rounded">
+                                            <p className="text-xs text-slate-700">
+                                              {product.memo}
+                                            </p>
+                                            <div className="flex gap-1 mt-1">
                                               <button
                                                 type="button"
                                                 onClick={() =>
@@ -1149,151 +1519,38 @@ export default function Home() {
                                                   )
                                                 }
                                                 disabled={isSaving}
-                                                className="px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 rounded flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className="px-1.5 py-0.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                               >
-                                                <FileText className="w-3 h-3" />
-                                                메모
+                                                수정
                                               </button>
                                               <button
                                                 type="button"
                                                 onClick={() =>
-                                                  handleDelete(
+                                                  deleteMemo(
                                                     category,
                                                     product.id
                                                   )
                                                 }
                                                 disabled={isSaving}
-                                                className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className="px-1.5 py-0.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                               >
-                                                <Trash2 className="w-3 h-3" />
                                                 삭제
                                               </button>
                                             </div>
-                                          ) : (
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                toggleMenu(category, product.id)
-                                              }
-                                              disabled={isSaving}
-                                              className="px-1.5 py-1 text-slate-600 hover:bg-slate-100 rounded transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                            >
-                                              <MoreVertical className="w-4 h-4" />
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
+                                          </div>
+                                        )}
                                     </div>
-
-                                    {/* 메모 입력/표시 영역 (간소화) */}
-                                    {editingMemo.category === category &&
-                                      editingMemo.productId === product.id && (
-                                        <div className="mt-2 p-2 bg-white border border-slate-200 rounded">
-                                          <textarea
-                                            placeholder="메모를 입력하세요"
-                                            value={product.memo || ""}
-                                            onChange={(e) =>
-                                              updateProduct(
-                                                category,
-                                                product.id,
-                                                {
-                                                  memo: e.target.value,
-                                                }
-                                              )
-                                            }
-                                            disabled={isSaving}
-                                            rows={2}
-                                            className="w-full px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 resize-none"
-                                          />
-                                          <div className="flex gap-1 mt-1">
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                saveMemo(
-                                                  category,
-                                                  product.id,
-                                                  product.memo || ""
-                                                )
-                                              }
-                                              disabled={isSaving}
-                                              className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                            >
-                                              저장
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={cancelMemoEdit}
-                                              disabled={isSaving}
-                                              className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                            >
-                                              취소
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-
-                                    {!editingMemo.category &&
-                                      !editingMemo.productId &&
-                                      product.memo &&
-                                      product.memo.trim() !== "" && (
-                                        <div className="mt-2 p-2 bg-slate-50 border border-slate-200 rounded">
-                                          <p className="text-xs text-slate-700">
-                                            {product.memo}
-                                          </p>
-                                          <div className="flex gap-1 mt-1">
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                startMemoEdit(
-                                                  category,
-                                                  product.id
-                                                )
-                                              }
-                                              disabled={isSaving}
-                                              className="px-1.5 py-0.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                              수정
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                deleteMemo(category, product.id)
-                                              }
-                                              disabled={isSaving}
-                                              className="px-1.5 py-0.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                              삭제
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     }
                   )}
 
-                  {/* 저장 버튼 */}
-                  <div className="pt-2 border-t border-slate-200">
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className="w-full px-3 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md active:bg-slate-900 flex items-center justify-center gap-2"
-                    >
-                      {isSaving ? (
-                        <>
-                          <div className="inline-block animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
-                          저장 중...
-                        </>
-                      ) : (
-                        "저장하기"
-                      )}
-                    </button>
-                  </div>
+                  {/* 저장 버튼 제거 - 헤더로 이동 */}
                 </form>
               </div>
 
@@ -1313,17 +1570,26 @@ export default function Home() {
                   </button>
                 </div>
                 <p className="text-sm text-slate-500 mb-4">
-                  각 자산별 월별 금액을 입력하세요
+                  각 자산별 월별 저축액 변화를 입력하세요 (양수: 저축, 음수:
+                  인출)
                 </p>
-                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                   {/* 모든 자산 상품 목록 가져오기 */}
                   {(() => {
-                    const allProducts: Array<{ name: string }> = [];
+                    const allProducts: Array<{
+                      name: string;
+                      category: AssetCategory;
+                      uniqueKey: string;
+                    }> = [];
                     (Object.keys(categoryLabels) as AssetCategory[]).forEach(
                       (category) => {
                         assets[category].forEach((product) => {
                           if (product.name && product.name.trim() !== "") {
-                            allProducts.push({ name: product.name });
+                            allProducts.push({
+                              name: product.name,
+                              category,
+                              uniqueKey: `${category}-${product.name}`,
+                            });
                           }
                         });
                       }
@@ -1337,80 +1603,116 @@ export default function Home() {
                       );
                     }
 
-                    // 현재 연도와 월 목록 생성 (최근 6개월)
-                    const months: string[] = [];
-                    const now = new Date();
-                    for (let i = 5; i >= 0; i--) {
-                      const date = new Date(
-                        now.getFullYear(),
-                        now.getMonth() - i,
-                        1
-                      );
-                      const year = date.getFullYear();
-                      const month = String(date.getMonth() + 1).padStart(
-                        2,
-                        "0"
-                      );
-                      months.push(`${year}-${month}`);
+                    // 순서가 있으면 순서대로 정렬, 없으면 현재 순서 유지
+                    let sortedProducts = [...allProducts];
+                    if (monthlyTrendsOrder.length > 0) {
+                      // 순서에 있는 것들을 먼저 배치하고, 나머지는 뒤에 추가
+                      const orderedProducts: typeof allProducts = [];
+                      const unorderedProducts: typeof allProducts = [];
+
+                      monthlyTrendsOrder.forEach((uniqueKey) => {
+                        const found = allProducts.find(
+                          (p) => p.uniqueKey === uniqueKey
+                        );
+                        if (found) {
+                          orderedProducts.push(found);
+                        }
+                      });
+
+                      allProducts.forEach((product) => {
+                        if (!monthlyTrendsOrder.includes(product.uniqueKey)) {
+                          unorderedProducts.push(product);
+                        }
+                      });
+
+                      sortedProducts = [
+                        ...orderedProducts,
+                        ...unorderedProducts,
+                      ];
+                    } else {
+                      // 순서가 없으면 초기 순서를 설정
+                      const initialOrder = allProducts.map((p) => p.uniqueKey);
+                      setMonthlyTrendsOrder(initialOrder);
+                      sortedProducts = allProducts;
                     }
 
+                    // 현재 연도의 1월~12월
+                    const currentYear = new Date().getFullYear();
+                    const months = Array.from({ length: 12 }, (_, i) => {
+                      const month = String(i + 1).padStart(2, "0");
+                      return `${currentYear}-${month}`;
+                    });
+
+                    // 드래그 가능한 아이템 ID 배열
+                    const itemIds = sortedProducts.map((p) => p.uniqueKey);
+
                     return (
-                      <div className="space-y-3">
-                        {allProducts.map((product) => {
-                          const assetName = product.name;
-                          const trends = monthlyTrends[assetName] || {};
-
-                          return (
-                            <div
-                              key={assetName}
-                              className="p-2 bg-slate-50 rounded border border-slate-200"
-                            >
-                              <div className="text-xs font-medium text-slate-700 mb-2">
-                                {assetName}
-                              </div>
-                              <div className="grid grid-cols-3 gap-1">
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <div className="min-w-full">
+                          <table className="w-full border-collapse">
+                            <thead className="sticky top-0 bg-slate-50 z-10">
+                              <tr>
+                                <th className="border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100 min-w-[120px]">
+                                  자산명
+                                </th>
+                                <th className="border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100">
+                                  만기일
+                                </th>
                                 {months.map((month) => {
-                                  const monthKey = month;
-                                  const value = trends[monthKey] || 0;
-
+                                  const monthNum = month.split("-")[1];
                                   return (
-                                    <div key={monthKey} className="space-y-0.5">
-                                      <label className="text-xs text-slate-600">
-                                        {month.replace("-", ".")}
-                                      </label>
-                                      <input
-                                        type="text"
-                                        value={value ? formatNumber(value) : ""}
-                                        onChange={(e) => {
-                                          const numericValue =
-                                            e.target.value.replace(
-                                              /[^0-9]/g,
-                                              ""
-                                            );
-                                          const amount = numericValue
-                                            ? Number(numericValue)
-                                            : 0;
-
-                                          setMonthlyTrends({
-                                            ...monthlyTrends,
-                                            [assetName]: {
-                                              ...trends,
-                                              [monthKey]: amount,
-                                            },
-                                          });
-                                        }}
-                                        disabled={isSaving}
-                                        placeholder="0"
-                                        className="w-full px-1.5 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
-                                      />
-                                    </div>
+                                    <th
+                                      key={month}
+                                      className="border border-slate-200 px-1.5 py-1.5 text-xs font-semibold text-slate-700 text-center bg-slate-100 min-w-[80px]"
+                                    >
+                                      {monthNum}월
+                                    </th>
                                   );
                                 })}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <SortableContext
+                                items={itemIds}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                {sortedProducts.map((product) => {
+                                  const assetName = product.name;
+                                  const trends = monthlyTrends[assetName] || {};
+
+                                  // 자산의 만기일 찾기 (해당 카테고리에서만)
+                                  let maturityDate: string | undefined;
+                                  const found = assets[product.category].find(
+                                    (p) => p.name === assetName
+                                  );
+                                  if (found) {
+                                    maturityDate = found.maturityDate;
+                                  }
+
+                                  return (
+                                    <SortableRow
+                                      key={product.uniqueKey}
+                                      product={product}
+                                      trends={trends}
+                                      maturityDate={maturityDate}
+                                      months={months}
+                                      assets={assets}
+                                      monthlyTrends={monthlyTrends}
+                                      setMonthlyTrends={setMonthlyTrends}
+                                      isSaving={isSaving}
+                                      formatNumber={formatNumber}
+                                    />
+                                  );
+                                })}
+                              </SortableContext>
+                            </tbody>
+                          </table>
+                        </div>
+                      </DndContext>
                     );
                   })()}
                 </div>
@@ -1675,41 +1977,19 @@ export default function Home() {
                   <h3 className="text-lg font-semibold text-slate-800">
                     연도별 자산 추이
                   </h3>
-                  <div className="flex items-center gap-2">
-                    {/* 연도 선택 */}
-                    <select
-                      value={selectedYear}
-                      onChange={(e) => setSelectedYear(e.target.value)}
-                      disabled={isSaving}
-                      className="px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400"
-                    >
-                      {(() => {
-                        const years: string[] = [];
-                        const currentYear = new Date().getFullYear();
-                        for (let i = 5; i >= 0; i--) {
-                          years.push(String(currentYear - i));
-                        }
-                        return years.map((year) => (
-                          <option key={year} value={year}>
-                            {year}년
-                          </option>
-                        ));
-                      })()}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleSaveAnnualTrends}
-                      disabled={isSaving}
-                      className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
-                    >
-                      저장
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveAnnualTrends}
+                    disabled={isSaving}
+                    className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
+                  >
+                    저장
+                  </button>
                 </div>
                 <p className="text-sm text-slate-500 mb-4">
                   연도별 월별 총 자산 추이를 확인하세요
                 </p>
-                <div className="space-y-3">
+                <div className="overflow-x-auto">
                   {(() => {
                     const months = [
                       "01",
@@ -1726,51 +2006,86 @@ export default function Home() {
                       "12",
                     ];
 
-                    const yearTrends = annualTrends[selectedYear] || {};
+                    // 연도 목록 생성 (2025년부터 최근 6년)
+                    const currentYear = new Date().getFullYear();
+                    const startYear = 2025;
+                    const years: string[] = [];
+                    const endYear = Math.max(currentYear, startYear);
+                    for (let year = startYear; year <= endYear; year++) {
+                      years.push(String(year));
+                    }
 
                     return (
-                      <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                        <div className="text-xs font-medium text-slate-700 mb-2">
-                          {selectedYear}년도
-                        </div>
-                        <div className="grid grid-cols-4 gap-1">
-                          {months.map((month) => {
-                            const monthKey = month;
-                            const value = yearTrends[monthKey] || 0;
-
-                            return (
-                              <div key={monthKey} className="space-y-0.5">
-                                <label className="text-xs text-slate-600">
+                      <div className="min-w-full">
+                        <table className="w-full border-collapse">
+                          <thead className="sticky top-0 bg-slate-50 z-10">
+                            <tr>
+                              <th className="border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100 min-w-[60px]">
+                                연도
+                              </th>
+                              {months.map((month) => (
+                                <th
+                                  key={month}
+                                  className="border border-slate-200 px-1.5 py-1.5 text-xs font-semibold text-slate-700 text-center bg-slate-100 min-w-[80px]"
+                                >
                                   {month}월
-                                </label>
-                                <input
-                                  type="text"
-                                  value={value ? formatNumber(value) : ""}
-                                  onChange={(e) => {
-                                    const numericValue = e.target.value.replace(
-                                      /[^0-9]/g,
-                                      ""
-                                    );
-                                    const amount = numericValue
-                                      ? Number(numericValue)
-                                      : 0;
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {years.map((year) => {
+                              const yearTrends = annualTrends[year] || {};
 
-                                    setAnnualTrends({
-                                      ...annualTrends,
-                                      [selectedYear]: {
-                                        ...yearTrends,
-                                        [monthKey]: amount,
-                                      },
-                                    });
-                                  }}
-                                  disabled={isSaving}
-                                  placeholder="0"
-                                  className="w-full px-1.5 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
+                              return (
+                                <tr key={year} className="hover:bg-slate-50">
+                                  <td className="border border-slate-200 px-2 py-2 text-xs font-medium text-slate-700 bg-slate-50">
+                                    {year}년
+                                  </td>
+                                  {months.map((month) => {
+                                    const monthKey = month;
+                                    const value = yearTrends[monthKey] || 0;
+
+                                    return (
+                                      <td
+                                        key={monthKey}
+                                        className="border border-slate-200 px-1 py-1"
+                                      >
+                                        <input
+                                          type="text"
+                                          value={
+                                            value ? formatNumber(value) : ""
+                                          }
+                                          onChange={(e) => {
+                                            const numericValue =
+                                              e.target.value.replace(
+                                                /[^0-9]/g,
+                                                ""
+                                              );
+                                            const amount = numericValue
+                                              ? Number(numericValue)
+                                              : 0;
+
+                                            setAnnualTrends({
+                                              ...annualTrends,
+                                              [year]: {
+                                                ...yearTrends,
+                                                [monthKey]: amount,
+                                              },
+                                            });
+                                          }}
+                                          disabled={isSaving}
+                                          placeholder="0"
+                                          className="w-full px-1.5 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-center"
+                                        />
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     );
                   })()}
