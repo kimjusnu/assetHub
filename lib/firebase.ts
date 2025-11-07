@@ -32,20 +32,22 @@ const firebaseConfig = {
 const isServerSide = typeof window === 'undefined';
 const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build';
 
-// 빌드 타임이 아닐 때만 검증
+// 환경 변수 검증 (빌드 타임이 아닐 때만)
 if (!isBuildTime) {
-  if (isServerSide) {
-    // 서버 사이드 런타임
-    if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-      console.warn('⚠️ Firebase 환경 변수가 설정되지 않았습니다. Vercel 환경 변수를 확인하세요.');
+  if (!firebaseConfig.apiKey) {
+    const errorMsg = 'Firebase API Key가 설정되지 않았습니다. Vercel 환경 변수를 확인하세요.';
+    if (isServerSide) {
+      console.error('❌', errorMsg);
+    } else {
+      throw new Error(errorMsg);
     }
-  } else {
-    // 클라이언트 사이드 런타임
-    if (!firebaseConfig.apiKey) {
-      throw new Error('Firebase API Key가 설정되지 않았습니다. 환경 변수를 확인하세요.');
-    }
-    if (!firebaseConfig.projectId) {
-      throw new Error('Firebase Project ID가 설정되지 않았습니다. 환경 변수를 확인하세요.');
+  }
+  if (!firebaseConfig.projectId) {
+    const errorMsg = 'Firebase Project ID가 설정되지 않았습니다. Vercel 환경 변수를 확인하세요.';
+    if (isServerSide) {
+      console.error('❌', errorMsg);
+    } else {
+      throw new Error(errorMsg);
     }
   }
 }
@@ -59,6 +61,7 @@ let app;
 try {
   // 빌드 타임에 환경 변수가 없으면 더미 값으로 초기화
   if (isBuildTime && (!firebaseConfig.apiKey || !firebaseConfig.projectId)) {
+    console.warn('⚠️ 빌드 타임: Firebase 환경 변수가 없어 더미 값으로 초기화합니다.');
     app = initializeApp({
       apiKey: 'dummy-key-for-build',
       authDomain: 'dummy.firebaseapp.com',
@@ -66,23 +69,41 @@ try {
       storageBucket: 'dummy.appspot.com',
       messagingSenderId: '123456789',
       appId: '1:123456789:web:dummy',
-    });
+    }, 'dummy-app');
   } else {
+    // 런타임에는 실제 환경 변수로 초기화
+    if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+      throw new Error('Firebase 환경 변수가 설정되지 않았습니다.');
+    }
     app = initializeApp(firebaseConfig);
   }
 } catch (error) {
   // 빌드 타임 에러는 무시하고 더미 앱으로 초기화
   if (isBuildTime) {
     console.warn('⚠️ Firebase 초기화 경고 (빌드 타임):', error);
-    app = initializeApp({
-      apiKey: 'dummy-key-for-build',
-      authDomain: 'dummy.firebaseapp.com',
-      projectId: 'dummy-project',
-      storageBucket: 'dummy.appspot.com',
-      messagingSenderId: '123456789',
-      appId: '1:123456789:web:dummy',
-    });
+    try {
+      app = initializeApp({
+        apiKey: 'dummy-key-for-build',
+        authDomain: 'dummy.firebaseapp.com',
+        projectId: 'dummy-project',
+        storageBucket: 'dummy.appspot.com',
+        messagingSenderId: '123456789',
+        appId: '1:123456789:web:dummy',
+      }, 'dummy-app');
+    } catch {
+      // 이미 초기화된 경우 무시
+      app = initializeApp({
+        apiKey: 'dummy-key-for-build',
+        authDomain: 'dummy.firebaseapp.com',
+        projectId: 'dummy-project',
+        storageBucket: 'dummy.appspot.com',
+        messagingSenderId: '123456789',
+        appId: '1:123456789:web:dummy',
+      });
+    }
   } else {
+    // 런타임 에러는 그대로 던짐
+    console.error('❌ Firebase 초기화 실패:', error);
     throw error;
   }
 }
