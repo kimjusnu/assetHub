@@ -959,13 +959,13 @@ export default function Home() {
             <div className="max-w-2xl mx-auto lg:mx-0 w-full">
               <div className="mb-12">
                 <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6 leading-tight">
-                  복잡한 자산관리
+                  자산관리툴로 금융관리
                   <br />
                   쉽고 간단하게 관리하세요
                 </h1>
                 <p className="text-base text-slate-600 leading-relaxed">
-                  전문가가 설계한 자산관리 툴로 자산별 추이를 그래프로 확인하고
-                  관리하세요
+                  전문가가 설계한 자산관리툴로 자산포트폴리오를 한눈에 확인하고
+                  금융관리를 체계적으로 관리하세요
                 </p>
               </div>
 
