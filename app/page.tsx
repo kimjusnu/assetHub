@@ -858,13 +858,12 @@ export default function Home() {
             <div className="max-w-2xl mx-auto lg:mx-0 w-full">
               <div className="mb-12">
                 <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6 leading-tight">
-                  당신의 자산을 위한
+                  복잡한 자산관리
                   <br />
-                  프라이빗 컨시어지 서비스
+                  쉽고 간단하게 관리하세요
                 </h1>
                 <p className="text-base text-slate-600 leading-relaxed">
-                  모든 자산을 하나의 대시보드로 통합해 데이터 기반으로 분석하고,
-                  목표에 맞는 전략을 제안합니다.
+                  전문가가 설계한 자산관리 툴로 자산별 추이를 그래프로 확인하고 관리하세요
                 </p>
               </div>
 
