@@ -24,6 +24,8 @@ import {
   ChevronDown,
   ChevronUp,
   GripVertical,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   DndContext,
@@ -42,6 +44,30 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+
+// 대시보드 탭 전환 화살표 버튼 컴포넌트
+const DashboardNavButton = ({
+  direction,
+  onClick,
+  title,
+}: {
+  direction: "left" | "right";
+  onClick: () => void;
+  title: string;
+}) => {
+  const Icon = direction === "left" ? ChevronLeft : ChevronRight;
+  const positionClass = direction === "left" ? "left-4" : "right-4";
+
+  return (
+    <button
+      onClick={onClick}
+      className={`fixed ${positionClass} top-1/2 -translate-y-1/2 p-3 bg-white hover:bg-slate-100 rounded-full transition-colors shadow-lg hover:shadow-xl z-50 border border-slate-200 cursor-pointer`}
+      title={title}
+    >
+      <Icon className="w-6 h-6 text-slate-700" />
+    </button>
+  );
+};
 
 export default function Home() {
   // useAuth 훅을 사용하여 현재 로그인 상태와 로그아웃 함수를 가져옵니다
@@ -162,16 +188,16 @@ export default function Home() {
   // 월별 가용 계획 현금 항목 접기/펼치기 상태
   const [expandedCash, setExpandedCash] = useState(false);
 
+  // 대시보드 탭 상태 ("management" | "charts")
+  const [dashboardTab, setDashboardTab] = useState<"management" | "charts">(
+    "management"
+  );
+
   // 연도별 자산 추이 상태
   // 예: { "2025": { "01": 23500000, "02": 23800000, ... } }
   const [annualTrends, setAnnualTrends] = useState<
     Record<string, Record<string, number>>
   >({});
-
-  // 선택된 연도 상태
-  const [selectedYear, setSelectedYear] = useState<string>(
-    String(new Date().getFullYear())
-  );
 
   // 자산 데이터 로드
   useEffect(() => {
@@ -398,7 +424,7 @@ export default function Home() {
         },
         { merge: true }
       );
-    } catch (err: any) {
+    } catch (err) {
       console.error("삭제 저장 실패:", err);
       setError("삭제 저장에 실패했습니다.");
       // 실패 시 원래 상태로 복구
@@ -492,9 +518,11 @@ export default function Home() {
       setTimeout(() => {
         setSuccess("");
       }, 3000);
-    } catch (err: any) {
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "자산 저장에 실패했습니다.";
       console.error("자산 저장 실패:", err);
-      setError(err.message || "자산 저장에 실패했습니다.");
+      setError(errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -525,9 +553,11 @@ export default function Home() {
 
       setSuccess("월별 자산 추이가 저장되었습니다.");
       setTimeout(() => setSuccess(""), 3000);
-    } catch (err: any) {
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "저장에 실패했습니다.";
       console.error("월별 자산 추이 저장 실패:", err);
-      setError(err.message || "저장에 실패했습니다.");
+      setError(errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -545,22 +575,6 @@ export default function Home() {
     })
   );
 
-  // 월별 자산 추이 드래그 종료 핸들러
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (over && active.id !== over.id) {
-      const oldIndex = monthlyTrendsOrder.indexOf(active.id as string);
-      const newIndex = monthlyTrendsOrder.indexOf(over.id as string);
-
-      if (oldIndex !== -1 && newIndex !== -1) {
-        setMonthlyTrendsOrder(
-          arrayMove(monthlyTrendsOrder, oldIndex, newIndex)
-        );
-      }
-    }
-  };
-
   // SortableRow 컴포넌트
   interface SortableRowProps {
     product: {
@@ -571,7 +585,6 @@ export default function Home() {
     trends: Record<string, number>;
     maturityDate?: string;
     months: string[];
-    assets: typeof assets;
     monthlyTrends: typeof monthlyTrends;
     setMonthlyTrends: (trends: typeof monthlyTrends) => void;
     isSaving: boolean;
@@ -583,7 +596,6 @@ export default function Home() {
     trends,
     maturityDate,
     months,
-    assets,
     monthlyTrends,
     setMonthlyTrends,
     isSaving,
@@ -621,7 +633,7 @@ export default function Home() {
       }
     };
 
-  return (
+    return (
       <tr ref={setNodeRef} style={style} className="hover:bg-slate-50">
         <td className="sticky left-0 z-10 border border-slate-200 px-2 py-2 text-xs font-medium text-slate-700 bg-slate-50">
           <div className="flex items-center gap-2">
@@ -643,15 +655,20 @@ export default function Home() {
           const changeAmount = trends[monthKey] || 0;
           const inputKey = `${product.uniqueKey}-${monthKey}`;
           const rawInputValue = inputValues[inputKey];
-          
+
           // 표시할 값: 입력 중이면 입력값에 쉼표 추가, 아니면 저장된 값에 쉼표 추가
           let displayValue = "";
           if (rawInputValue !== undefined) {
             // 입력 중인 값에 쉼표 추가
             const numericPart = rawInputValue.replace(/[^0-9]/g, "");
             if (numericPart) {
-              const formatted = numericPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-              displayValue = rawInputValue.startsWith("-") ? `-${formatted}` : formatted;
+              const formatted = numericPart.replace(
+                /\B(?=(\d{3})+(?!\d))/g,
+                ","
+              );
+              displayValue = rawInputValue.startsWith("-")
+                ? `-${formatted}`
+                : formatted;
             } else if (rawInputValue === "-") {
               displayValue = "-";
             }
@@ -671,10 +688,10 @@ export default function Home() {
                 value={displayValue}
                 onChange={(e) => {
                   const inputValue = e.target.value;
-                  
+
                   // 쉼표 제거하고 숫자와 마이너스만 추출
                   let cleanedValue = inputValue.replace(/[^0-9-]/g, "");
-                  
+
                   // 마이너스가 여러 개 있으면 첫 번째만 유지
                   if (cleanedValue.includes("-")) {
                     const firstMinusIndex = cleanedValue.indexOf("-");
@@ -683,22 +700,23 @@ export default function Home() {
                       cleanedValue = cleanedValue.replace(/-/g, "");
                     } else {
                       // 맨 앞에 마이너스가 있으면 나머지 마이너스 제거
-                      cleanedValue = "-" + cleanedValue.slice(1).replace(/-/g, "");
+                      cleanedValue =
+                        "-" + cleanedValue.slice(1).replace(/-/g, "");
                     }
                   }
-                  
+
                   // 입력값만 저장 (setMonthlyTrends 호출하지 않음)
-                  setInputValues(prev => ({
+                  setInputValues((prev) => ({
                     ...prev,
-                    [inputKey]: cleanedValue
+                    [inputKey]: cleanedValue,
                   }));
                 }}
                 onBlur={(e) => {
                   const inputValue = e.target.value;
-                  
+
                   // 쉼표 제거
                   const cleanedValue = inputValue.replace(/[^0-9-]/g, "");
-                  
+
                   // 빈 문자열이면 0으로 설정
                   if (cleanedValue === "" || cleanedValue === "-") {
                     setMonthlyTrends({
@@ -708,7 +726,7 @@ export default function Home() {
                         [monthKey]: 0,
                       },
                     });
-                    setInputValues(prev => {
+                    setInputValues((prev) => {
                       const newValues = { ...prev };
                       delete newValues[inputKey];
                       return newValues;
@@ -723,13 +741,14 @@ export default function Home() {
                     if (firstMinusIndex !== 0) {
                       finalValue = cleanedValue.replace(/-/g, "");
                     } else {
-                      finalValue = "-" + cleanedValue.slice(1).replace(/-/g, "");
+                      finalValue =
+                        "-" + cleanedValue.slice(1).replace(/-/g, "");
                     }
                   }
 
                   // 숫자만 추출 (마이너스 제외)
                   const numbersOnly = finalValue.replace(/-/g, "");
-                  
+
                   // 빈 값이거나 마이너스만 있으면 0
                   if (numbersOnly === "" || finalValue === "-") {
                     setMonthlyTrends({
@@ -753,9 +772,9 @@ export default function Home() {
                       },
                     });
                   }
-                  
+
                   // 포커스를 잃으면 입력값 초기화 (다음에 표시할 때는 저장된 값 사용)
-                  setInputValues(prev => {
+                  setInputValues((prev) => {
                     const newValues = { ...prev };
                     delete newValues[inputKey];
                     return newValues;
@@ -811,38 +830,6 @@ export default function Home() {
     });
   };
 
-  // 월별 자산 금액 계산 함수
-  // 자산의 현재 금액(assets에서 가져온 amount) + 해당 월까지의 저축액 변화 누적
-  const calculateMonthlyAssetAmount = (
-    assetName: string,
-    baseAmount: number,
-    targetMonth: string,
-    months: string[]
-  ): number => {
-    const trends = monthlyTrends[assetName] || {};
-    let total = baseAmount;
-
-    // targetMonth까지의 모든 저축액 변화를 누적
-    for (const month of months) {
-      if (trends[month]) {
-        total += trends[month];
-      }
-      if (month === targetMonth) break;
-    }
-
-    return total;
-  };
-
-  // 월별 저축액 변화량 계산 (이전 달 대비)
-  const calculateMonthlyChange = (
-    assetName: string,
-    month: string,
-    months: string[]
-  ): number => {
-    const trends = monthlyTrends[assetName] || {};
-    return trends[month] || 0;
-  };
-
   // 가용금액 계산 (수입 - 저축 항목 합계)
   const calculateAvailableAmount = (): number => {
     const savingsTotal = monthlyPlans.savings.reduce(
@@ -876,9 +863,11 @@ export default function Home() {
 
       setSuccess("월별 가용 계획이 저장되었습니다.");
       setTimeout(() => setSuccess(""), 3000);
-    } catch (err: any) {
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "저장에 실패했습니다.";
       console.error("월별 가용 계획 저장 실패:", err);
-      setError(err.message || "저장에 실패했습니다.");
+      setError(errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -908,9 +897,11 @@ export default function Home() {
 
       setSuccess("연도별 자산 추이가 저장되었습니다.");
       setTimeout(() => setSuccess(""), 3000);
-    } catch (err: any) {
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "저장에 실패했습니다.";
       console.error("연도별 자산 추이 저장 실패:", err);
-      setError(err.message || "저장에 실패했습니다.");
+      setError(errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -973,7 +964,8 @@ export default function Home() {
                   쉽고 간단하게 관리하세요
                 </h1>
                 <p className="text-base text-slate-600 leading-relaxed">
-                  전문가가 설계한 자산관리 툴로 자산별 추이를 그래프로 확인하고 관리하세요
+                  전문가가 설계한 자산관리 툴로 자산별 추이를 그래프로 확인하고
+                  관리하세요
                 </p>
               </div>
 
@@ -1248,8 +1240,8 @@ export default function Home() {
                     복잡한 절차 없이 자산을 쉽고 간단하게
                     {/* <br /> */}
                     기록하여 관리할 수 있습니다
-          </p>
-        </div>
+                  </p>
+                </div>
 
                 <div>
                   <div className="flex items-center gap-2 mb-3">
@@ -1390,1213 +1382,1322 @@ export default function Home() {
 
       {/* 메인 컨텐츠 */}
       <div className="flex-1 p-4">
+        {/* 왼쪽 화살표 버튼 (관리 대시보드에서만 표시) */}
+        {dashboardTab === "management" && (
+          <DashboardNavButton
+            direction="left"
+            onClick={() => setDashboardTab("charts")}
+            title="차트 대시보드로 이동"
+          />
+        )}
+
+        {/* 오른쪽 화살표 버튼 (차트 대시보드에서만 표시) */}
+        {dashboardTab === "charts" && (
+          <DashboardNavButton
+            direction="right"
+            onClick={() => setDashboardTab("management")}
+            title="자산 관리 대시보드로 이동"
+          />
+        )}
+
         <div className="max-w-6xl mx-auto">
           <main className="bg-white rounded-lg border border-slate-200 p-4 sm:p-6 shadow-sm">
-            <div className="mb-4 sm:mb-6">
-              <h2 className="text-lg sm:text-xl font-semibold mb-1 text-slate-800">
-                자산 관리 대시보드
-              </h2>
-              <p className="text-sm text-slate-600">
-                모든 자산을 한눈에 확인하고 관리하세요
-              </p>
-            </div>
-
-            {/* 에러 메시지 */}
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                <div className="flex items-center gap-2">
-                  <svg
-                    className="w-5 h-5 text-red-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <p className="text-sm text-red-600">{error}</p>
+            {dashboardTab === "management" ? (
+              <>
+                <div className="mb-4 sm:mb-6">
+                  <h2 className="text-lg sm:text-xl font-semibold mb-1 text-slate-800">
+                    자산 관리 대시보드
+                  </h2>
+                  <p className="text-sm text-slate-600">
+                    모든 자산을 한눈에 확인하고 관리하세요
+                  </p>
                 </div>
-              </div>
-            )}
 
-            {/* 성공 메시지 */}
-            {success && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                <div className="flex items-center gap-2">
-                  <svg
-                    className="w-5 h-5 text-green-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <p className="text-sm text-green-600">{success}</p>
-                </div>
-              </div>
-            )}
-
-            {/* 자산 카드들 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {/* 현금 자산 카드 */}
-              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-slate-300 transition-all duration-200 cursor-default hover:shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 bg-slate-600 rounded flex items-center justify-center">
-                    <svg
-                      className="w-4 h-4 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                {/* 에러 메시지 */}
+                {error && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <div className="flex items-center gap-2">
+                      <svg
+                        className="w-5 h-5 text-red-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <p className="text-sm text-red-600">{error}</p>
+                    </div>
                   </div>
-                  <h3 className="font-medium text-sm text-slate-700">
-                    현금 자산
-                  </h3>
-                </div>
-                <p className="text-xl font-semibold text-slate-900">
-                  {assetsLoading ? (
-                    <span className="text-slate-400">로딩 중...</span>
-                  ) : (
-                    `${formatNumber(depositSavingsTotal)}원`
-                  )}
-                </p>
-              </div>
+                )}
 
-              {/* 투자 자산 카드 */}
-              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-slate-300 transition-all duration-200 cursor-default hover:shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center">
-                    <svg
-                      className="w-4 h-4 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                      />
-                    </svg>
+                {/* 성공 메시지 */}
+                {success && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                    <div className="flex items-center gap-2">
+                      <svg
+                        className="w-5 h-5 text-green-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <p className="text-sm text-green-600">{success}</p>
+                    </div>
                   </div>
-                  <h3 className="font-medium text-sm text-slate-700">
-                    투자 자산
-                  </h3>
-                </div>
-                <p className="text-xl font-semibold text-slate-900">
-                  {assetsLoading ? (
-                    <span className="text-slate-400">로딩 중...</span>
-                  ) : (
-                    `${formatNumber(investmentTotal)}원`
-                  )}
-                </p>
-              </div>
+                )}
 
-              {/* 총 자산 카드 */}
-              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-slate-300 transition-all duration-200 cursor-default hover:shadow-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 bg-slate-800 rounded flex items-center justify-center">
-                    <svg
-                      className="w-4 h-4 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                      />
-                    </svg>
-                  </div>
-                  <h3 className="font-medium text-sm text-slate-700">
-                    총 자산
-                  </h3>
-                </div>
-                <p className="text-xl font-semibold text-slate-900">
-                  {assetsLoading ? (
-                    <span className="text-slate-400">로딩 중...</span>
-                  ) : (
-                    `${formatNumber(totalAssets)}원`
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {/* 4개 섹션 레이아웃 */}
-            <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* 왼쪽 위: 자산 입력 폼 */}
-              <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-800">
-                    자산 현황
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleSubmit(e);
-                    }}
-                    disabled={isSaving}
-                    className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
-                  >
-                    저장
-                  </button>
-                </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* 각 대분류별 섹션 */}
-                  {(Object.keys(categoryLabels) as AssetCategory[]).map(
-                    (category) => {
-                      const products = assets[category];
-                      const categoryTotal = calculateTotal(products);
-
-                      return (
-                        <div
-                          key={category}
-                          className="border-b border-slate-200 pb-4 last:border-b-0"
+                {/* 자산 카드들 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  {/* 현금 자산 카드 */}
+                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-slate-300 transition-all duration-200 cursor-default hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 bg-slate-600 rounded flex items-center justify-center">
+                        <svg
+                          className="w-4 h-4 text-white"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
                         >
-                          {/* 대분류 헤더 */}
-                          <div className="flex items-center justify-between mb-3">
-                            <button
-                              type="button"
-                              onClick={() => toggleCategory(category)}
-                              className="flex items-center gap-2 flex-1 text-left hover:opacity-70 transition-opacity"
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="font-medium text-sm text-slate-700">
+                        현금 자산
+                      </h3>
+                    </div>
+                    <p className="text-xl font-semibold text-slate-900">
+                      {assetsLoading ? (
+                        <span className="text-slate-400">로딩 중...</span>
+                      ) : (
+                        `${formatNumber(depositSavingsTotal)}원`
+                      )}
+                    </p>
+                  </div>
+
+                  {/* 투자 자산 카드 */}
+                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-slate-300 transition-all duration-200 cursor-default hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center">
+                        <svg
+                          className="w-4 h-4 text-white"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="font-medium text-sm text-slate-700">
+                        투자 자산
+                      </h3>
+                    </div>
+                    <p className="text-xl font-semibold text-slate-900">
+                      {assetsLoading ? (
+                        <span className="text-slate-400">로딩 중...</span>
+                      ) : (
+                        `${formatNumber(investmentTotal)}원`
+                      )}
+                    </p>
+                  </div>
+
+                  {/* 총 자산 카드 */}
+                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-slate-300 transition-all duration-200 cursor-default hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 bg-slate-800 rounded flex items-center justify-center">
+                        <svg
+                          className="w-4 h-4 text-white"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="font-medium text-sm text-slate-700">
+                        총 자산
+                      </h3>
+                    </div>
+                    <p className="text-xl font-semibold text-slate-900">
+                      {assetsLoading ? (
+                        <span className="text-slate-400">로딩 중...</span>
+                      ) : (
+                        `${formatNumber(totalAssets)}원`
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4개 섹션 레이아웃 */}
+                <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* 왼쪽 위: 자산 입력 폼 */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-slate-800">
+                        자산 현황
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleSubmit(e);
+                        }}
+                        disabled={isSaving}
+                        className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
+                      >
+                        저장
+                      </button>
+                    </div>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      {/* 각 대분류별 섹션 */}
+                      {(Object.keys(categoryLabels) as AssetCategory[]).map(
+                        (category) => {
+                          const products = assets[category];
+                          const categoryTotal = calculateTotal(products);
+
+                          return (
+                            <div
+                              key={category}
+                              className="border-b border-slate-200 pb-4 last:border-b-0"
                             >
-                              {expandedCategories[category] ? (
-                                <ChevronUp className="w-4 h-4 text-slate-600" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4 text-slate-600" />
-                              )}
-                              <div>
-                                <h4 className="text-sm font-semibold text-slate-800">
-                                  {categoryLabels[category]}
-                                </h4>
-                                <p className="text-xs text-slate-600 mt-0.5">
-                                  총 {formatNumber(categoryTotal)}원
-                                  {products.length > 0 && (
-                                    <span className="ml-1">
-                                      ({products.length}개)
-                                    </span>
+                              {/* 대분류 헤더 */}
+                              <div className="flex items-center justify-between mb-3">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCategory(category)}
+                                  className="flex items-center gap-2 flex-1 text-left hover:opacity-70 transition-opacity"
+                                >
+                                  {expandedCategories[category] ? (
+                                    <ChevronUp className="w-4 h-4 text-slate-600" />
+                                  ) : (
+                                    <ChevronDown className="w-4 h-4 text-slate-600" />
                                   )}
-                                </p>
+                                  <div>
+                                    <h4 className="text-sm font-semibold text-slate-800">
+                                      {categoryLabels[category]}
+                                    </h4>
+                                    <p className="text-xs text-slate-600 mt-0.5">
+                                      총 {formatNumber(categoryTotal)}원
+                                      {products.length > 0 && (
+                                        <span className="ml-1">
+                                          ({products.length}개)
+                                        </span>
+                                      )}
+                                    </p>
+                                  </div>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    addProduct(category);
+                                    // 추가 시 자동으로 펼치기
+                                    if (!expandedCategories[category]) {
+                                      setExpandedCategories({
+                                        ...expandedCategories,
+                                        [category]: true,
+                                      });
+                                    }
+                                  }}
+                                  disabled={isSaving}
+                                  className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1"
+                                >
+                                  <svg
+                                    className="w-3 h-3"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                                    />
+                                  </svg>
+                                  추가
+                                </button>
                               </div>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                addProduct(category);
-                                // 추가 시 자동으로 펼치기
-                                if (!expandedCategories[category]) {
-                                  setExpandedCategories({
-                                    ...expandedCategories,
-                                    [category]: true,
-                                  });
-                                }
-                              }}
-                              disabled={isSaving}
-                              className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1"
-                            >
-                              <svg
-                                className="w-3 h-3"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                                />
-                              </svg>
-                              추가
-                            </button>
-                          </div>
 
-                          {/* 상품 목록 (접기/펼치기) */}
-                          {expandedCategories[category] && (
-                            <div className="space-y-2">
-                              {products.length === 0 ? (
-                                <p className="text-xs text-slate-400 text-center py-2">
-                                  등록된 상품이 없습니다.
-                                </p>
-                              ) : (
-                                products.map((product) => {
-                                  const maturityDate = product.maturityDate
-                                    ? new Date(product.maturityDate)
-                                    : null;
+                              {/* 상품 목록 (접기/펼치기) */}
+                              {expandedCategories[category] && (
+                                <div className="space-y-2">
+                                  {products.length === 0 ? (
+                                    <p className="text-xs text-slate-400 text-center py-2">
+                                      등록된 상품이 없습니다.
+                                    </p>
+                                  ) : (
+                                    products.map((product) => {
+                                      const maturityDate = product.maturityDate
+                                        ? new Date(product.maturityDate)
+                                        : null;
 
-                                  return (
-                                    <div
-                                      key={product.id}
-                                      className="p-2 bg-slate-50 rounded border border-slate-200 space-y-2"
-                                    >
-                                      <div className="grid grid-cols-1 gap-2">
-                                        {/* 상품 이름 */}
-                                        <div>
-                                          <label className="block text-xs font-medium text-slate-700 mb-0.5">
-                                            상품 이름{" "}
-                                            <span className="text-red-500">
-                                              *
-                                            </span>
-                                          </label>
-                                          <input
-                                            type="text"
-                                            placeholder="예: 정기예금"
-                                            value={product.name}
-                                            onChange={(e) =>
-                                              updateProduct(
-                                                category,
-                                                product.id,
-                                                {
-                                                  name: e.target.value,
-                                                }
-                                              )
-                                            }
-                                            disabled={isSaving}
-                                            required
-                                            className="w-full px-2 py-1.5 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8"
-                                          />
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-2">
-                                          {/* 만기일 */}
-                                          <div>
-                                            <label className="block text-xs font-medium text-slate-700 mb-0.5">
-                                              만기일
-                                            </label>
-                                            <DatePicker
-                                              selected={maturityDate}
-                                              onChange={(date: Date | null) => {
-                                                updateProduct(
-                                                  category,
-                                                  product.id,
-                                                  {
-                                                    maturityDate: date
-                                                      ? `${date.getFullYear()}-${String(
-                                                          date.getMonth() + 1
-                                                        ).padStart(
-                                                          2,
-                                                          "0"
-                                                        )}-${String(
-                                                          date.getDate()
-                                                        ).padStart(2, "0")}`
-                                                      : undefined,
-                                                  }
-                                                );
-                                              }}
-                                              dateFormat="yy.MM.dd"
-                                              locale={ko}
-                                              placeholderText="만기일"
-                                              disabled={isSaving}
-                                              className="w-full text-xs"
-                                            />
-                                          </div>
-
-                                          {/* 예치금액 */}
-                                          <div>
-                                            <label className="block text-xs font-medium text-slate-700 mb-0.5">
-                                              금액(원)
-                                            </label>
-                                            <div className="relative">
+                                      return (
+                                        <div
+                                          key={product.id}
+                                          className="p-2 bg-slate-50 rounded border border-slate-200 space-y-2"
+                                        >
+                                          <div className="grid grid-cols-1 gap-2">
+                                            {/* 상품 이름 */}
+                                            <div>
+                                              <label className="block text-xs font-medium text-slate-700 mb-0.5">
+                                                상품 이름{" "}
+                                                <span className="text-red-500">
+                                                  *
+                                                </span>
+                                              </label>
                                               <input
                                                 type="text"
-                                                placeholder="0"
-                                                value={
-                                                  product.amount
-                                                    ? formatNumber(
-                                                        product.amount
-                                                      )
-                                                    : ""
-                                                }
-                                                onChange={(e) => {
-                                                  const numericValue =
-                                                    e.target.value.replace(
-                                                      /[^0-9]/g,
-                                                      ""
-                                                    );
-                                                  const amount = numericValue
-                                                    ? Number(numericValue)
-                                                    : 0;
+                                                placeholder="예: 정기예금"
+                                                value={product.name}
+                                                onChange={(e) =>
                                                   updateProduct(
                                                     category,
                                                     product.id,
                                                     {
-                                                      amount,
+                                                      name: e.target.value,
                                                     }
-                                                  );
-                                                }}
+                                                  )
+                                                }
                                                 disabled={isSaving}
-                                                className="w-full px-2 py-1.5 pr-8 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8"
+                                                required
+                                                className="w-full px-2 py-1.5 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8"
                                               />
-                                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">
-                                                원
-                                              </span>
                                             </div>
-                                          </div>
-                                        </div>
 
-                                        {/* 더보기 버튼 */}
-                                        <div className="flex justify-end">
-                                          <div className="menu-container">
-                                            {openMenu.category === category &&
-                                            openMenu.productId ===
-                                              product.id ? (
-                                              <div className="flex gap-1 bg-white border border-slate-200 rounded shadow-lg p-1">
-                                                <button
-                                                  type="button"
-                                                  onClick={() =>
-                                                    startMemoEdit(
+                                            <div className="grid grid-cols-2 gap-2">
+                                              {/* 만기일 */}
+                                              <div>
+                                                <label className="block text-xs font-medium text-slate-700 mb-0.5">
+                                                  만기일
+                                                </label>
+                                                <DatePicker
+                                                  selected={maturityDate}
+                                                  onChange={(
+                                                    date: Date | null
+                                                  ) => {
+                                                    updateProduct(
                                                       category,
-                                                      product.id
-                                                    )
-                                                  }
+                                                      product.id,
+                                                      {
+                                                        maturityDate: date
+                                                          ? `${date.getFullYear()}-${String(
+                                                              date.getMonth() +
+                                                                1
+                                                            ).padStart(
+                                                              2,
+                                                              "0"
+                                                            )}-${String(
+                                                              date.getDate()
+                                                            ).padStart(2, "0")}`
+                                                          : undefined,
+                                                      }
+                                                    );
+                                                  }}
+                                                  dateFormat="yy.MM.dd"
+                                                  locale={ko}
+                                                  placeholderText="만기일"
                                                   disabled={isSaving}
-                                                  className="px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 rounded flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                  <FileText className="w-3 h-3" />
-                                                  메모
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() =>
-                                                    handleDelete(
-                                                      category,
-                                                      product.id
-                                                    )
-                                                  }
-                                                  disabled={isSaving}
-                                                  className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                  <Trash2 className="w-3 h-3" />
-                                                  삭제
-                                                </button>
+                                                  className="w-full text-xs"
+                                                />
                                               </div>
-                                            ) : (
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  toggleMenu(
-                                                    category,
-                                                    product.id
-                                                  )
-                                                }
-                                                disabled={isSaving}
-                                                className="px-1.5 py-1 text-slate-600 hover:bg-slate-100 rounded transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                              >
-                                                <MoreVertical className="w-4 h-4" />
-                                              </button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
 
-                                      {/* 메모 입력/표시 영역 (간소화) */}
-                                      {editingMemo.category === category &&
-                                        editingMemo.productId ===
-                                          product.id && (
-                                          <div className="mt-2 p-2 bg-white border border-slate-200 rounded">
-                                            <textarea
-                                              placeholder="메모를 입력하세요"
-                                              value={product.memo || ""}
-                                              onChange={(e) =>
-                                                updateProduct(
-                                                  category,
-                                                  product.id,
-                                                  {
-                                                    memo: e.target.value,
+                                              {/* 예치금액 */}
+                                              <div>
+                                                <label className="block text-xs font-medium text-slate-700 mb-0.5">
+                                                  금액(원)
+                                                </label>
+                                                <div className="relative">
+                                                  <input
+                                                    type="text"
+                                                    placeholder="0"
+                                                    value={
+                                                      product.amount
+                                                        ? formatNumber(
+                                                            product.amount
+                                                          )
+                                                        : ""
+                                                    }
+                                                    onChange={(e) => {
+                                                      const numericValue =
+                                                        e.target.value.replace(
+                                                          /[^0-9]/g,
+                                                          ""
+                                                        );
+                                                      const amount =
+                                                        numericValue
+                                                          ? Number(numericValue)
+                                                          : 0;
+                                                      updateProduct(
+                                                        category,
+                                                        product.id,
+                                                        {
+                                                          amount,
+                                                        }
+                                                      );
+                                                    }}
+                                                    disabled={isSaving}
+                                                    className="w-full px-2 py-1.5 pr-8 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8"
+                                                  />
+                                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">
+                                                    원
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* 더보기 버튼 */}
+                                            <div className="flex justify-end">
+                                              <div className="menu-container">
+                                                {openMenu.category ===
+                                                  category &&
+                                                openMenu.productId ===
+                                                  product.id ? (
+                                                  <div className="flex gap-1 bg-white border border-slate-200 rounded shadow-lg p-1">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() =>
+                                                        startMemoEdit(
+                                                          category,
+                                                          product.id
+                                                        )
+                                                      }
+                                                      disabled={isSaving}
+                                                      className="px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 rounded flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                      <FileText className="w-3 h-3" />
+                                                      메모
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() =>
+                                                        handleDelete(
+                                                          category,
+                                                          product.id
+                                                        )
+                                                      }
+                                                      disabled={isSaving}
+                                                      className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                      <Trash2 className="w-3 h-3" />
+                                                      삭제
+                                                    </button>
+                                                  </div>
+                                                ) : (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      toggleMenu(
+                                                        category,
+                                                        product.id
+                                                      )
+                                                    }
+                                                    disabled={isSaving}
+                                                    className="px-1.5 py-1 text-slate-600 hover:bg-slate-100 rounded transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                                  >
+                                                    <MoreVertical className="w-4 h-4" />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* 메모 입력/표시 영역 (간소화) */}
+                                          {editingMemo.category === category &&
+                                            editingMemo.productId ===
+                                              product.id && (
+                                              <div className="mt-2 p-2 bg-white border border-slate-200 rounded">
+                                                <textarea
+                                                  placeholder="메모를 입력하세요"
+                                                  value={product.memo || ""}
+                                                  onChange={(e) =>
+                                                    updateProduct(
+                                                      category,
+                                                      product.id,
+                                                      {
+                                                        memo: e.target.value,
+                                                      }
+                                                    )
                                                   }
-                                                )
-                                              }
-                                              disabled={isSaving}
-                                              rows={2}
-                                              className="w-full px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 resize-none"
-                                            />
-                                            <div className="flex gap-1 mt-1">
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  saveMemo(
-                                                    category,
-                                                    product.id,
-                                                    product.memo || ""
-                                                  )
-                                                }
-                                                disabled={isSaving}
-                                                className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                              >
-                                                저장
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={cancelMemoEdit}
-                                                disabled={isSaving}
-                                                className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                              >
-                                                취소
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
+                                                  disabled={isSaving}
+                                                  rows={2}
+                                                  className="w-full px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 resize-none"
+                                                />
+                                                <div className="flex gap-1 mt-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      saveMemo(
+                                                        category,
+                                                        product.id,
+                                                        product.memo || ""
+                                                      )
+                                                    }
+                                                    disabled={isSaving}
+                                                    className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                                  >
+                                                    저장
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={cancelMemoEdit}
+                                                    disabled={isSaving}
+                                                    className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                                  >
+                                                    취소
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
 
-                                      {!editingMemo.category &&
-                                        !editingMemo.productId &&
-                                        product.memo &&
-                                        product.memo.trim() !== "" && (
-                                          <div className="mt-2 p-2 bg-slate-50 border border-slate-200 rounded">
-                                            <p className="text-xs text-slate-700">
-                                              {product.memo}
-                                            </p>
-                                            <div className="flex gap-1 mt-1">
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  startMemoEdit(
-                                                    category,
-                                                    product.id
-                                                  )
-                                                }
-                                                disabled={isSaving}
-                                                className="px-1.5 py-0.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                              >
-                                                수정
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  deleteMemo(
-                                                    category,
-                                                    product.id
-                                                  )
-                                                }
-                                                disabled={isSaving}
-                                                className="px-1.5 py-0.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                              >
-                                                삭제
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
-                                    </div>
-                                  );
-                                })
+                                          {!editingMemo.category &&
+                                            !editingMemo.productId &&
+                                            product.memo &&
+                                            product.memo.trim() !== "" && (
+                                              <div className="mt-2 p-2 bg-slate-50 border border-slate-200 rounded">
+                                                <p className="text-xs text-slate-700">
+                                                  {product.memo}
+                                                </p>
+                                                <div className="flex gap-1 mt-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      startMemoEdit(
+                                                        category,
+                                                        product.id
+                                                      )
+                                                    }
+                                                    disabled={isSaving}
+                                                    className="px-1.5 py-0.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  >
+                                                    수정
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      deleteMemo(
+                                                        category,
+                                                        product.id
+                                                      )
+                                                    }
+                                                    disabled={isSaving}
+                                                    className="px-1.5 py-0.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  >
+                                                    삭제
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
                               )}
                             </div>
+                          );
+                        }
+                      )}
+
+                      {/* 저장 버튼 제거 - 헤더로 이동 */}
+                    </form>
+                  </div>
+
+                  {/* 오른쪽 위: 월별 자산 추이 */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-slate-800">
+                        월별 자산 추이
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={handleSaveMonthlyTrends}
+                        disabled={isSaving}
+                        className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
+                      >
+                        저장
+                      </button>
+                    </div>
+                    <p className="text-sm text-slate-500 mb-4">
+                      각 자산별 월별 저축액 변화를 입력하세요 (양수: 저축, 음수:
+                      인출)
+                    </p>
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                      {/* 모든 자산 상품 목록 가져오기 */}
+                      {(() => {
+                        const allProducts: Array<{
+                          name: string;
+                          category: AssetCategory;
+                          uniqueKey: string;
+                        }> = [];
+                        (
+                          Object.keys(categoryLabels) as AssetCategory[]
+                        ).forEach((category) => {
+                          assets[category].forEach((product) => {
+                            if (product.name && product.name.trim() !== "") {
+                              allProducts.push({
+                                name: product.name,
+                                category,
+                                uniqueKey: `${category}-${product.name}`,
+                              });
+                            }
+                          });
+                        });
+
+                        if (allProducts.length === 0) {
+                          return (
+                            <p className="text-xs text-slate-400 text-center py-4">
+                              자산 현황에서 상품을 먼저 등록해주세요.
+                            </p>
+                          );
+                        }
+
+                        // 순서가 있으면 순서대로 정렬, 없으면 현재 순서 유지
+                        let sortedProducts = [...allProducts];
+                        if (monthlyTrendsOrder.length > 0) {
+                          // 순서에 있는 것들을 먼저 배치하고, 나머지는 뒤에 추가
+                          const orderedProducts: typeof allProducts = [];
+                          const unorderedProducts: typeof allProducts = [];
+
+                          monthlyTrendsOrder.forEach((uniqueKey) => {
+                            const found = allProducts.find(
+                              (p) => p.uniqueKey === uniqueKey
+                            );
+                            if (found) {
+                              orderedProducts.push(found);
+                            }
+                          });
+
+                          allProducts.forEach((product) => {
+                            if (
+                              !monthlyTrendsOrder.includes(product.uniqueKey)
+                            ) {
+                              unorderedProducts.push(product);
+                            }
+                          });
+
+                          sortedProducts = [
+                            ...orderedProducts,
+                            ...unorderedProducts,
+                          ];
+                        } else {
+                          // 순서가 없으면 초기 순서를 설정
+                          const initialOrder = allProducts.map(
+                            (p) => p.uniqueKey
+                          );
+                          setMonthlyTrendsOrder(initialOrder);
+                          sortedProducts = allProducts;
+                        }
+
+                        // 현재 연도의 1월~12월
+                        const currentYear = new Date().getFullYear();
+                        const months = Array.from({ length: 12 }, (_, i) => {
+                          const month = String(i + 1).padStart(2, "0");
+                          return `${currentYear}-${month}`;
+                        });
+
+                        // 드래그 가능한 아이템 ID 배열
+                        const itemIds = sortedProducts.map((p) => p.uniqueKey);
+
+                        // 드래그 종료 핸들러 (인라인으로 정의하여 itemIds에 접근)
+                        const handleDragEndLocal = (event: DragEndEvent) => {
+                          const { active, over } = event;
+
+                          if (over && active.id !== over.id) {
+                            const oldIndex = itemIds.indexOf(
+                              active.id as string
+                            );
+                            const newIndex = itemIds.indexOf(over.id as string);
+
+                            if (oldIndex !== -1 && newIndex !== -1) {
+                              // itemIds를 기준으로 새로운 순서 생성
+                              const newOrder = arrayMove(
+                                itemIds,
+                                oldIndex,
+                                newIndex
+                              );
+                              setMonthlyTrendsOrder(newOrder);
+                            }
+                          }
+                        };
+
+                        return (
+                          <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEndLocal}
+                          >
+                            <div className="min-w-full">
+                              <table className="w-full border-collapse">
+                                <thead className="sticky top-0 bg-slate-50 z-10">
+                                  <tr>
+                                    <th className="sticky left-0 z-20 border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100 min-w-[120px]">
+                                      자산명
+                                    </th>
+                                    <th className="border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100">
+                                      만기일
+                                    </th>
+                                    {months.map((month) => {
+                                      const monthNum = month.split("-")[1];
+                                      return (
+                                        <th
+                                          key={month}
+                                          className="border border-slate-200 px-1.5 py-1.5 text-xs font-semibold text-slate-700 text-center bg-slate-100 min-w-[80px]"
+                                        >
+                                          {monthNum}월
+                                        </th>
+                                      );
+                                    })}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <SortableContext
+                                    items={itemIds}
+                                    strategy={verticalListSortingStrategy}
+                                  >
+                                    {sortedProducts.map((product) => {
+                                      const assetName = product.name;
+                                      const trends =
+                                        monthlyTrends[assetName] || {};
+
+                                      // 자산의 만기일 찾기 (해당 카테고리에서만)
+                                      let maturityDate: string | undefined;
+                                      const found = assets[
+                                        product.category
+                                      ].find((p) => p.name === assetName);
+                                      if (found) {
+                                        maturityDate = found.maturityDate;
+                                      }
+
+                                      return (
+                                        <SortableRow
+                                          key={product.uniqueKey}
+                                          product={product}
+                                          trends={trends}
+                                          maturityDate={maturityDate}
+                                          months={months}
+                                          monthlyTrends={monthlyTrends}
+                                          setMonthlyTrends={setMonthlyTrends}
+                                          isSaving={isSaving}
+                                          formatNumber={formatNumber}
+                                        />
+                                      );
+                                    })}
+                                  </SortableContext>
+                                  {/* 월별 총합 행 */}
+                                  <tr className="bg-slate-100 hover:bg-slate-200">
+                                    <td
+                                      colSpan={2}
+                                      className="sticky left-0 z-10 border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-900 bg-slate-200"
+                                    >
+                                      월별 총합
+                                    </td>
+                                    {months.map((month) => {
+                                      // 해당 월의 모든 자산 저축액 합계 계산
+                                      const total = sortedProducts.reduce(
+                                        (sum, product) => {
+                                          const assetName = product.name;
+                                          const trends =
+                                            monthlyTrends[assetName] || {};
+                                          const amount = trends[month] || 0;
+                                          return sum + amount;
+                                        },
+                                        0
+                                      );
+                                      return (
+                                        <td
+                                          key={month}
+                                          className="border border-slate-200 px-1.5 py-2 text-xs font-semibold text-slate-900 text-right bg-slate-200"
+                                        >
+                                          {total !== 0
+                                            ? `${
+                                                total < 0 ? "-" : ""
+                                              }${formatNumber(Math.abs(total))}`
+                                            : "-"}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                  {/* 증감액(저축액) 행 */}
+                                  <tr className="bg-slate-50 hover:bg-slate-100">
+                                    <td
+                                      colSpan={2}
+                                      className="sticky left-0 z-10 border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-800 bg-slate-100"
+                                    >
+                                      증감액(저축액)
+                                    </td>
+                                    {months.map((month, monthIndex) => {
+                                      // 현재 월의 총합 계산
+                                      const currentTotal =
+                                        sortedProducts.reduce(
+                                          (sum, product) => {
+                                            const assetName = product.name;
+                                            const trends =
+                                              monthlyTrends[assetName] || {};
+                                            const amount = trends[month] || 0;
+                                            return sum + amount;
+                                          },
+                                          0
+                                        );
+
+                                      // 이전 달의 총합 계산
+                                      let previousTotal = 0;
+                                      if (monthIndex > 0) {
+                                        const previousMonth =
+                                          months[monthIndex - 1];
+                                        previousTotal = sortedProducts.reduce(
+                                          (sum, product) => {
+                                            const assetName = product.name;
+                                            const trends =
+                                              monthlyTrends[assetName] || {};
+                                            const amount =
+                                              trends[previousMonth] || 0;
+                                            return sum + amount;
+                                          },
+                                          0
+                                        );
+                                      }
+
+                                      // 증감액 계산 (현재 총합 - 이전 총합)
+                                      const changeAmount =
+                                        currentTotal - previousTotal;
+                                      const isPositive = changeAmount > 0;
+                                      const isNegative = changeAmount < 0;
+
+                                      return (
+                                        <td
+                                          key={month}
+                                          className={`border border-slate-200 px-1.5 py-2 text-xs font-semibold text-right bg-slate-100 ${
+                                            isPositive
+                                              ? "text-green-600"
+                                              : isNegative
+                                              ? "text-red-600"
+                                              : "text-slate-600"
+                                          }`}
+                                        >
+                                          {monthIndex === 0
+                                            ? "-" // 1월은 이전 달이 없으므로 "-"
+                                            : changeAmount !== 0
+                                            ? `${
+                                                isPositive ? "+" : ""
+                                              }${formatNumber(
+                                                Math.abs(changeAmount)
+                                              )}`
+                                            : "-"}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </DndContext>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* 왼쪽 아래: 월별 가용 계획 */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-slate-800">
+                        월별 가용 계획
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={handleSaveMonthlyPlans}
+                        disabled={isSaving}
+                        className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
+                      >
+                        저장
+                      </button>
+                    </div>
+                    <p className="text-sm text-slate-500 mb-4">
+                      월 수입과 저축 계획을 입력하세요
+                    </p>
+
+                    {/* 수입 입력 */}
+                    <div className="mb-4 p-3 bg-slate-50 rounded border border-slate-200">
+                      <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                        월 수입
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={
+                            monthlyPlans.income
+                              ? formatNumber(monthlyPlans.income)
+                              : ""
+                          }
+                          onChange={(e) => {
+                            const numericValue = e.target.value.replace(
+                              /[^0-9]/g,
+                              ""
+                            );
+                            const amount = numericValue
+                              ? Number(numericValue)
+                              : 0;
+                            setMonthlyPlans({
+                              ...monthlyPlans,
+                              income: amount,
+                            });
+                          }}
+                          disabled={isSaving}
+                          placeholder="0"
+                          className="flex-1 px-2 py-1.5 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8 text-right"
+                        />
+                        <span className="text-xs text-slate-500">원</span>
+                      </div>
+                    </div>
+
+                    {/* 저축 섹션 */}
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedSavings(!expandedSavings)}
+                          className="flex items-center gap-2 hover:opacity-70 transition-opacity"
+                        >
+                          {expandedSavings ? (
+                            <ChevronUp className="w-4 h-4 text-slate-600" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-600" />
+                          )}
+                          <h4 className="text-xs font-semibold text-slate-700">
+                            저축 항목
+                          </h4>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            addMonthlyPlanItem("savings");
+                            // 추가 시 자동으로 펼치기
+                            if (!expandedSavings) {
+                              setExpandedSavings(true);
+                            }
+                          }}
+                          disabled={isSaving}
+                          className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1"
+                        >
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                            />
+                          </svg>
+                          추가
+                        </button>
+                      </div>
+                      {expandedSavings && (
+                        <div className="space-y-2">
+                          {monthlyPlans.savings.length === 0 ? (
+                            <p className="text-xs text-slate-400 text-center py-2">
+                              저축 항목이 없습니다. 추가 버튼을 클릭하세요.
+                            </p>
+                          ) : (
+                            monthlyPlans.savings.map((item) => (
+                              <div
+                                key={item.id}
+                                className="p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5"
+                              >
+                                <div className="grid grid-cols-[1fr_auto] gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="항목명 (예: 청년도약)"
+                                    value={item.name}
+                                    onChange={(e) =>
+                                      updateMonthlyPlanItem(
+                                        "savings",
+                                        item.id,
+                                        {
+                                          name: e.target.value,
+                                        }
+                                      )
+                                    }
+                                    disabled={isSaving}
+                                    className="px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      deleteMonthlyPlanItem("savings", item.id)
+                                    }
+                                    disabled={isSaving}
+                                    className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="금액"
+                                    value={
+                                      item.amount
+                                        ? formatNumber(item.amount)
+                                        : ""
+                                    }
+                                    onChange={(e) => {
+                                      const numericValue =
+                                        e.target.value.replace(/[^0-9]/g, "");
+                                      const amount = numericValue
+                                        ? Number(numericValue)
+                                        : 0;
+                                      updateMonthlyPlanItem(
+                                        "savings",
+                                        item.id,
+                                        {
+                                          amount,
+                                        }
+                                      );
+                                    }}
+                                    disabled={isSaving}
+                                    className="flex-1 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
+                                  />
+                                  <span className="text-xs text-slate-500">
+                                    원
+                                  </span>
+                                </div>
+                              </div>
+                            ))
                           )}
                         </div>
-                      );
-                    }
-                  )}
+                      )}
+                    </div>
 
-                  {/* 저장 버튼 제거 - 헤더로 이동 */}
-                </form>
-              </div>
+                    {/* 가용금액 자동 계산 표시 */}
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="flex items-center justify-between p-3 bg-slate-100 rounded border border-slate-300">
+                        <span className="text-sm font-semibold text-slate-800">
+                          가용금액
+                        </span>
+                        <span className="text-base font-bold text-slate-900">
+                          {formatNumber(calculateAvailableAmount())}원
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        (수입 - 저축 합계)
+                      </p>
+                    </div>
 
-              {/* 오른쪽 위: 월별 자산 추이 */}
-              <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-800">
-                    월별 자산 추이
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={handleSaveMonthlyTrends}
-                    disabled={isSaving}
-                    className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
-                  >
-                    저장
-                  </button>
-                </div>
-                <p className="text-sm text-slate-500 mb-4">
-                  각 자산별 월별 저축액 변화를 입력하세요 (양수: 저축, 음수:
-                  인출)
-                </p>
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-                  {/* 모든 자산 상품 목록 가져오기 */}
-                  {(() => {
-                    const allProducts: Array<{
-                      name: string;
-                      category: AssetCategory;
-                      uniqueKey: string;
-                    }> = [];
-                    (Object.keys(categoryLabels) as AssetCategory[]).forEach(
-                      (category) => {
-                        assets[category].forEach((product) => {
-                          if (product.name && product.name.trim() !== "") {
-                            allProducts.push({
-                              name: product.name,
-                              category,
-                              uniqueKey: `${category}-${product.name}`,
-                            });
-                          }
-                        });
-                      }
-                    );
+                    {/* 현금 섹션 (선택사항) */}
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCash(!expandedCash)}
+                          className="flex items-center gap-2 hover:opacity-70 transition-opacity"
+                        >
+                          {expandedCash ? (
+                            <ChevronUp className="w-4 h-4 text-slate-600" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-600" />
+                          )}
+                          <h4 className="text-xs font-semibold text-slate-700">
+                            현금 항목
+                          </h4>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            addMonthlyPlanItem("cash");
+                            // 추가 시 자동으로 펼치기
+                            if (!expandedCash) {
+                              setExpandedCash(true);
+                            }
+                          }}
+                          disabled={isSaving}
+                          className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1"
+                        >
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                            />
+                          </svg>
+                          추가
+                        </button>
+                      </div>
+                      {expandedCash && (
+                        <div className="space-y-2">
+                          {monthlyPlans.cash.length === 0 ? (
+                            <p className="text-xs text-slate-400 text-center py-2">
+                              현금 항목이 없습니다. 추가 버튼을 클릭하세요.
+                            </p>
+                          ) : (
+                            monthlyPlans.cash.map((item) => (
+                              <div
+                                key={item.id}
+                                className="p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5"
+                              >
+                                <div className="grid grid-cols-[1fr_auto] gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="항목명 (예: 교통비)"
+                                    value={item.name}
+                                    onChange={(e) =>
+                                      updateMonthlyPlanItem("cash", item.id, {
+                                        name: e.target.value,
+                                      })
+                                    }
+                                    disabled={isSaving}
+                                    className="px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      deleteMonthlyPlanItem("cash", item.id)
+                                    }
+                                    disabled={isSaving}
+                                    className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="금액"
+                                    value={
+                                      item.amount
+                                        ? formatNumber(item.amount)
+                                        : ""
+                                    }
+                                    onChange={(e) => {
+                                      const numericValue =
+                                        e.target.value.replace(/[^0-9]/g, "");
+                                      const amount = numericValue
+                                        ? Number(numericValue)
+                                        : 0;
+                                      updateMonthlyPlanItem("cash", item.id, {
+                                        amount,
+                                      });
+                                    }}
+                                    disabled={isSaving}
+                                    className="flex-1 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
+                                  />
+                                  <span className="text-xs text-slate-500">
+                                    원
+                                  </span>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                    if (allProducts.length === 0) {
-                      return (
-                        <p className="text-xs text-slate-400 text-center py-4">
-                          자산 현황에서 상품을 먼저 등록해주세요.
-                        </p>
-                      );
-                    }
-
-                    // 순서가 있으면 순서대로 정렬, 없으면 현재 순서 유지
-                    let sortedProducts = [...allProducts];
-                    if (monthlyTrendsOrder.length > 0) {
-                      // 순서에 있는 것들을 먼저 배치하고, 나머지는 뒤에 추가
-                      const orderedProducts: typeof allProducts = [];
-                      const unorderedProducts: typeof allProducts = [];
-
-                      monthlyTrendsOrder.forEach((uniqueKey) => {
-                        const found = allProducts.find(
-                          (p) => p.uniqueKey === uniqueKey
-                        );
-                        if (found) {
-                          orderedProducts.push(found);
-                        }
-                      });
-
-                      allProducts.forEach((product) => {
-                        if (!monthlyTrendsOrder.includes(product.uniqueKey)) {
-                          unorderedProducts.push(product);
-                        }
-                      });
-
-                      sortedProducts = [
-                        ...orderedProducts,
-                        ...unorderedProducts,
-                      ];
-                    } else {
-                      // 순서가 없으면 초기 순서를 설정
-                      const initialOrder = allProducts.map((p) => p.uniqueKey);
-                      setMonthlyTrendsOrder(initialOrder);
-                      sortedProducts = allProducts;
-                    }
-
-                    // 현재 연도의 1월~12월
-                    const currentYear = new Date().getFullYear();
-                    const months = Array.from({ length: 12 }, (_, i) => {
-                      const month = String(i + 1).padStart(2, "0");
-                      return `${currentYear}-${month}`;
-                    });
-
-                    // 드래그 가능한 아이템 ID 배열
-                    const itemIds = sortedProducts.map((p) => p.uniqueKey);
-
-                    // 드래그 종료 핸들러 (인라인으로 정의하여 itemIds에 접근)
-                    const handleDragEndLocal = (event: DragEndEvent) => {
-                      const { active, over } = event;
-
-                      if (over && active.id !== over.id) {
-                        const oldIndex = itemIds.indexOf(active.id as string);
-                        const newIndex = itemIds.indexOf(over.id as string);
-
-                        if (oldIndex !== -1 && newIndex !== -1) {
-                          // itemIds를 기준으로 새로운 순서 생성
-                          const newOrder = arrayMove(itemIds, oldIndex, newIndex);
-                          setMonthlyTrendsOrder(newOrder);
-                        }
-                      }
-                    };
-
-                    return (
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEndLocal}
+                  {/* 오른쪽 아래: 연도별 자산 추이 */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-slate-800">
+                        연도별 자산 추이
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={handleSaveAnnualTrends}
+                        disabled={isSaving}
+                        className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
                       >
-                        <div className="min-w-full">
-                          <table className="w-full border-collapse">
-                            <thead className="sticky top-0 bg-slate-50 z-10">
-                              <tr>
-                                <th className="sticky left-0 z-20 border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100 min-w-[120px]">
-                                  자산명
-                                </th>
-                                <th className="border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100">
-                                  만기일
-                                </th>
-                                {months.map((month) => {
-                                  const monthNum = month.split("-")[1];
-                                  return (
+                        저장
+                      </button>
+                    </div>
+                    <p className="text-sm text-slate-500 mb-4">
+                      연도별 월별 총 자산 추이를 확인하세요
+                    </p>
+                    <div className="overflow-x-auto">
+                      {(() => {
+                        const months = [
+                          "01",
+                          "02",
+                          "03",
+                          "04",
+                          "05",
+                          "06",
+                          "07",
+                          "08",
+                          "09",
+                          "10",
+                          "11",
+                          "12",
+                        ];
+
+                        // 연도 목록 생성 (2025년부터 최근 6년)
+                        const currentYear = new Date().getFullYear();
+                        const startYear = 2025;
+                        const years: string[] = [];
+                        const endYear = Math.max(currentYear, startYear);
+                        for (let year = startYear; year <= endYear; year++) {
+                          years.push(String(year));
+                        }
+
+                        return (
+                          <div className="min-w-full">
+                            <table className="w-full border-collapse">
+                              <thead className="sticky top-0 bg-slate-50 z-10">
+                                <tr>
+                                  <th className="border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100 min-w-[60px]">
+                                    연도
+                                  </th>
+                                  {months.map((month) => (
                                     <th
                                       key={month}
                                       className="border border-slate-200 px-1.5 py-1.5 text-xs font-semibold text-slate-700 text-center bg-slate-100 min-w-[80px]"
                                     >
-                                      {monthNum}월
+                                      {month}월
                                     </th>
-                                  );
-                                })}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <SortableContext
-                                items={itemIds}
-                                strategy={verticalListSortingStrategy}
-                              >
-                                {sortedProducts.map((product) => {
-                                  const assetName = product.name;
-                                  const trends = monthlyTrends[assetName] || {};
-
-                                  // 자산의 만기일 찾기 (해당 카테고리에서만)
-                                  let maturityDate: string | undefined;
-                                  const found = assets[product.category].find(
-                                    (p) => p.name === assetName
-                                  );
-                                  if (found) {
-                                    maturityDate = found.maturityDate;
-                                  }
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {years.map((year) => {
+                                  const yearTrends = annualTrends[year] || {};
 
                                   return (
-                                    <SortableRow
-                                      key={product.uniqueKey}
-                                      product={product}
-                                      trends={trends}
-                                      maturityDate={maturityDate}
-                                      months={months}
-                                      assets={assets}
-                                      monthlyTrends={monthlyTrends}
-                                      setMonthlyTrends={setMonthlyTrends}
-                                      isSaving={isSaving}
-                                      formatNumber={formatNumber}
-                                    />
-                                  );
-                                })}
-                              </SortableContext>
-                              {/* 월별 총합 행 */}
-                              <tr className="bg-slate-100 hover:bg-slate-200">
-                                <td
-                                  colSpan={2}
-                                  className="sticky left-0 z-10 border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-900 bg-slate-200"
-                                >
-                                  월별 총합
-                                </td>
-                                {months.map((month) => {
-                                  // 해당 월의 모든 자산 저축액 합계 계산
-                                  const total = sortedProducts.reduce(
-                                    (sum, product) => {
-                                      const assetName = product.name;
-                                      const trends =
-                                        monthlyTrends[assetName] || {};
-                                      const amount = trends[month] || 0;
-                                      return sum + amount;
-                                    },
-                                    0
-                                  );
-                                  return (
-                                    <td
-                                      key={month}
-                                      className="border border-slate-200 px-1.5 py-2 text-xs font-semibold text-slate-900 text-right bg-slate-200"
+                                    <tr
+                                      key={year}
+                                      className="hover:bg-slate-50"
                                     >
-                                      {total !== 0 
-                                        ? `${total < 0 ? "-" : ""}${formatNumber(Math.abs(total))}` 
-                                        : "-"}
-                                    </td>
+                                      <td className="border border-slate-200 px-2 py-2 text-xs font-medium text-slate-700 bg-slate-50">
+                                        {year}년
+                                      </td>
+                                      {months.map((month) => {
+                                        const monthKey = month;
+                                        const value = yearTrends[monthKey] || 0;
+
+                                        return (
+                                          <td
+                                            key={monthKey}
+                                            className="border border-slate-200 px-1 py-1"
+                                          >
+                                            <input
+                                              type="text"
+                                              value={
+                                                value ? formatNumber(value) : ""
+                                              }
+                                              onChange={(e) => {
+                                                const numericValue =
+                                                  e.target.value.replace(
+                                                    /[^0-9]/g,
+                                                    ""
+                                                  );
+                                                const amount = numericValue
+                                                  ? Number(numericValue)
+                                                  : 0;
+
+                                                setAnnualTrends({
+                                                  ...annualTrends,
+                                                  [year]: {
+                                                    ...yearTrends,
+                                                    [monthKey]: amount,
+                                                  },
+                                                });
+                                              }}
+                                              disabled={isSaving}
+                                              placeholder="0"
+                                              className="w-full px-1.5 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-center"
+                                            />
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
                                   );
                                 })}
-                              </tr>
-                              {/* 증감액(저축액) 행 */}
-                              <tr className="bg-slate-50 hover:bg-slate-100">
-                                <td
-                                  colSpan={2}
-                                  className="sticky left-0 z-10 border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-800 bg-slate-100"
-                                >
-                                  증감액(저축액)
-                                </td>
-                                {months.map((month, monthIndex) => {
-                                  // 현재 월의 총합 계산
-                                  const currentTotal = sortedProducts.reduce(
-                                    (sum, product) => {
-                                      const assetName = product.name;
-                                      const trends =
-                                        monthlyTrends[assetName] || {};
-                                      const amount = trends[month] || 0;
-                                      return sum + amount;
-                                    },
-                                    0
-                                  );
-
-                                  // 이전 달의 총합 계산
-                                  let previousTotal = 0;
-                                  if (monthIndex > 0) {
-                                    const previousMonth = months[monthIndex - 1];
-                                    previousTotal = sortedProducts.reduce(
-                                      (sum, product) => {
-                                        const assetName = product.name;
-                                        const trends =
-                                          monthlyTrends[assetName] || {};
-                                        const amount = trends[previousMonth] || 0;
-                                        return sum + amount;
-                                      },
-                                      0
-                                    );
-                                  }
-
-                                  // 증감액 계산 (현재 총합 - 이전 총합)
-                                  const changeAmount = currentTotal - previousTotal;
-                                  const isPositive = changeAmount > 0;
-                                  const isNegative = changeAmount < 0;
-                                  
-                                  return (
-                                    <td
-                                      key={month}
-                                      className={`border border-slate-200 px-1.5 py-2 text-xs font-semibold text-right bg-slate-100 ${
-                                        isPositive
-                                          ? "text-green-600"
-                                          : isNegative
-                                          ? "text-red-600"
-                                          : "text-slate-600"
-                                      }`}
-                                    >
-                                      {monthIndex === 0
-                                        ? "-" // 1월은 이전 달이 없으므로 "-"
-                                        : changeAmount !== 0
-                                        ? `${isPositive ? "+" : ""}${formatNumber(Math.abs(changeAmount))}`
-                                        : "-"}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </DndContext>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* 왼쪽 아래: 월별 가용 계획 */}
-              <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-800">
-                    월별 가용 계획
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={handleSaveMonthlyPlans}
-                    disabled={isSaving}
-                    className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
-                  >
-                    저장
-                  </button>
-                </div>
-                <p className="text-sm text-slate-500 mb-4">
-                  월 수입과 저축 계획을 입력하세요
-                </p>
-
-                {/* 수입 입력 */}
-                <div className="mb-4 p-3 bg-slate-50 rounded border border-slate-200">
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                    월 수입
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={
-                        monthlyPlans.income
-                          ? formatNumber(monthlyPlans.income)
-                          : ""
-                      }
-                      onChange={(e) => {
-                        const numericValue = e.target.value.replace(
-                          /[^0-9]/g,
-                          ""
-                        );
-                        const amount = numericValue ? Number(numericValue) : 0;
-                        setMonthlyPlans({
-                          ...monthlyPlans,
-                          income: amount,
-                        });
-                      }}
-                      disabled={isSaving}
-                      placeholder="0"
-                      className="flex-1 px-2 py-1.5 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-8 text-right"
-                    />
-                    <span className="text-xs text-slate-500">원</span>
-                  </div>
-                </div>
-
-                {/* 저축 섹션 */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedSavings(!expandedSavings)}
-                      className="flex items-center gap-2 hover:opacity-70 transition-opacity"
-                    >
-                      {expandedSavings ? (
-                        <ChevronUp className="w-4 h-4 text-slate-600" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-slate-600" />
-                      )}
-                      <h4 className="text-xs font-semibold text-slate-700">
-                        저축 항목
-                      </h4>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        addMonthlyPlanItem("savings");
-                        // 추가 시 자동으로 펼치기
-                        if (!expandedSavings) {
-                          setExpandedSavings(true);
-                        }
-                      }}
-                      disabled={isSaving}
-                      className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1"
-                    >
-                      <svg
-                        className="w-3 h-3"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                        />
-                      </svg>
-                      추가
-                    </button>
-                  </div>
-                  {expandedSavings && (
-                    <div className="space-y-2">
-                      {monthlyPlans.savings.length === 0 ? (
-                        <p className="text-xs text-slate-400 text-center py-2">
-                          저축 항목이 없습니다. 추가 버튼을 클릭하세요.
-                        </p>
-                      ) : (
-                        monthlyPlans.savings.map((item) => (
-                          <div
-                            key={item.id}
-                            className="p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5"
-                          >
-                            <div className="grid grid-cols-[1fr_auto] gap-2">
-                              <input
-                                type="text"
-                                placeholder="항목명 (예: 청년도약)"
-                                value={item.name}
-                                onChange={(e) =>
-                                  updateMonthlyPlanItem("savings", item.id, {
-                                    name: e.target.value,
-                                  })
-                                }
-                                disabled={isSaving}
-                                className="px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  deleteMonthlyPlanItem("savings", item.id)
-                                }
-                                disabled={isSaving}
-                                className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                placeholder="금액"
-                                value={
-                                  item.amount ? formatNumber(item.amount) : ""
-                                }
-                                onChange={(e) => {
-                                  const numericValue = e.target.value.replace(
-                                    /[^0-9]/g,
-                                    ""
-                                  );
-                                  const amount = numericValue
-                                    ? Number(numericValue)
-                                    : 0;
-                                  updateMonthlyPlanItem("savings", item.id, {
-                                    amount,
-                                  });
-                                }}
-                                disabled={isSaving}
-                                className="flex-1 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
-                              />
-                              <span className="text-xs text-slate-500">원</span>
-                            </div>
+                              </tbody>
+                            </table>
                           </div>
-                        ))
-                      )}
+                        );
+                      })()}
                     </div>
-                  )}
-                </div>
-
-                {/* 가용금액 자동 계산 표시 */}
-                <div className="mt-4 pt-4 border-t border-slate-200">
-                  <div className="flex items-center justify-between p-3 bg-slate-100 rounded border border-slate-300">
-                    <span className="text-sm font-semibold text-slate-800">
-                      가용금액
-                    </span>
-                    <span className="text-base font-bold text-slate-900">
-                      {formatNumber(calculateAvailableAmount())}원
-                    </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    (수입 - 저축 합계)
+                </div>
+              </>
+            ) : (
+              <>
+                {/* 차트 대시보드 */}
+                <div className="mb-4 sm:mb-6">
+                  <h2 className="text-lg sm:text-xl font-semibold mb-1 text-slate-800">
+                    차트 대시보드
+                  </h2>
+                  <p className="text-sm text-slate-600">
+                    자산 데이터를 시각적으로 분석하세요
                   </p>
                 </div>
 
-                {/* 현금 섹션 (선택사항) */}
-                <div className="mt-4 pt-4 border-t border-slate-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedCash(!expandedCash)}
-                      className="flex items-center gap-2 hover:opacity-70 transition-opacity"
-                    >
-                      {expandedCash ? (
-                        <ChevronUp className="w-4 h-4 text-slate-600" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-slate-600" />
-                      )}
-                      <h4 className="text-xs font-semibold text-slate-700">
-                        현금 항목
-                      </h4>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        addMonthlyPlanItem("cash");
-                        // 추가 시 자동으로 펼치기
-                        if (!expandedCash) {
-                          setExpandedCash(true);
-                        }
-                      }}
-                      disabled={isSaving}
-                      className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1"
-                    >
-                      <svg
-                        className="w-3 h-3"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                        />
-                      </svg>
-                      추가
-                    </button>
-                  </div>
-                  {expandedCash && (
-                    <div className="space-y-2">
-                      {monthlyPlans.cash.length === 0 ? (
-                        <p className="text-xs text-slate-400 text-center py-2">
-                          현금 항목이 없습니다. 추가 버튼을 클릭하세요.
-                        </p>
-                      ) : (
-                        monthlyPlans.cash.map((item) => (
-                          <div
-                            key={item.id}
-                            className="p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5"
-                          >
-                            <div className="grid grid-cols-[1fr_auto] gap-2">
-                              <input
-                                type="text"
-                                placeholder="항목명 (예: 교통비)"
-                                value={item.name}
-                                onChange={(e) =>
-                                  updateMonthlyPlanItem("cash", item.id, {
-                                    name: e.target.value,
-                                  })
-                                }
-                                disabled={isSaving}
-                                className="px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  deleteMonthlyPlanItem("cash", item.id)
-                                }
-                                disabled={isSaving}
-                                className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                placeholder="금액"
-                                value={
-                                  item.amount ? formatNumber(item.amount) : ""
-                                }
-                                onChange={(e) => {
-                                  const numericValue = e.target.value.replace(
-                                    /[^0-9]/g,
-                                    ""
-                                  );
-                                  const amount = numericValue
-                                    ? Number(numericValue)
-                                    : 0;
-                                  updateMonthlyPlanItem("cash", item.id, {
-                                    amount,
-                                  });
-                                }}
-                                disabled={isSaving}
-                                className="flex-1 px-2 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-right"
-                              />
-                              <span className="text-xs text-slate-500">원</span>
-                            </div>
-                          </div>
-                        ))
-                      )}
+                {/* 차트 섹션 */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* 자산 성장 추이 차트 */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                      자산 성장 추이
+                    </h3>
+                    <div className="h-64 flex items-center justify-center text-slate-400">
+                      <p className="text-sm">차트 영역 (추후 구현 예정)</p>
                     </div>
-                  )}
+                  </div>
+
+                  {/* 자산 구성 차트 */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                      자산 구성 현황
+                    </h3>
+                    <div className="h-64 flex items-center justify-center text-slate-400">
+                      <p className="text-sm">차트 영역 (추후 구현 예정)</p>
+                    </div>
+                  </div>
+
+                  {/* 월별 추이 차트 */}
+                  <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm lg:col-span-2">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                      월별 자산 추이
+                    </h3>
+                    <div className="h-64 flex items-center justify-center text-slate-400">
+                      <p className="text-sm">차트 영역 (추후 구현 예정)</p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              {/* 오른쪽 아래: 연도별 자산 추이 */}
-              <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-slate-800">
-                    연도별 자산 추이
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={handleSaveAnnualTrends}
-                    disabled={isSaving}
-                    className="px-2 py-1 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm hover:shadow-md"
-                  >
-                    저장
-                  </button>
-                </div>
-                <p className="text-sm text-slate-500 mb-4">
-                  연도별 월별 총 자산 추이를 확인하세요
-                </p>
-                <div className="overflow-x-auto">
-                  {(() => {
-                    const months = [
-                      "01",
-                      "02",
-                      "03",
-                      "04",
-                      "05",
-                      "06",
-                      "07",
-                      "08",
-                      "09",
-                      "10",
-                      "11",
-                      "12",
-                    ];
-
-                    // 연도 목록 생성 (2025년부터 최근 6년)
-                    const currentYear = new Date().getFullYear();
-                    const startYear = 2025;
-                    const years: string[] = [];
-                    const endYear = Math.max(currentYear, startYear);
-                    for (let year = startYear; year <= endYear; year++) {
-                      years.push(String(year));
-                    }
-
-                    return (
-                      <div className="min-w-full">
-                        <table className="w-full border-collapse">
-                          <thead className="sticky top-0 bg-slate-50 z-10">
-                            <tr>
-                              <th className="border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100 min-w-[60px]">
-                                연도
-                              </th>
-                              {months.map((month) => (
-                                <th
-                                  key={month}
-                                  className="border border-slate-200 px-1.5 py-1.5 text-xs font-semibold text-slate-700 text-center bg-slate-100 min-w-[80px]"
-                                >
-                                  {month}월
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {years.map((year) => {
-                              const yearTrends = annualTrends[year] || {};
-
-                              return (
-                                <tr key={year} className="hover:bg-slate-50">
-                                  <td className="border border-slate-200 px-2 py-2 text-xs font-medium text-slate-700 bg-slate-50">
-                                    {year}년
-                                  </td>
-                                  {months.map((month) => {
-                                    const monthKey = month;
-                                    const value = yearTrends[monthKey] || 0;
-
-                                    return (
-                                      <td
-                                        key={monthKey}
-                                        className="border border-slate-200 px-1 py-1"
-                                      >
-                                        <input
-                                          type="text"
-                                          value={
-                                            value ? formatNumber(value) : ""
-                                          }
-                                          onChange={(e) => {
-                                            const numericValue =
-                                              e.target.value.replace(
-                                                /[^0-9]/g,
-                                                ""
-                                              );
-                                            const amount = numericValue
-                                              ? Number(numericValue)
-                                              : 0;
-
-                                            setAnnualTrends({
-                                              ...annualTrends,
-                                              [year]: {
-                                                ...yearTrends,
-                                                [monthKey]: amount,
-                                              },
-                                            });
-                                          }}
-                                          disabled={isSaving}
-                                          placeholder="0"
-                                          className="w-full px-1.5 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-center"
-                                        />
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-        </div>
-      </main>
+              </>
+            )}
+          </main>
         </div>
       </div>
     </div>
