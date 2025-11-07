@@ -27,13 +27,21 @@ const firebaseConfig = {
 /**
  * 환경 변수 검증
  * 필수 설정값이 없으면 애플리케이션이 시작되지 않도록 에러를 발생시킵니다.
+ * 빌드 타임에는 경고만 출력하고, 런타임에 에러를 발생시킵니다.
  */
-if (!firebaseConfig.apiKey) {
-  throw new Error('Firebase API Key가 설정되지 않았습니다. .env.local 파일을 확인하세요.');
-}
-
-if (!firebaseConfig.projectId) {
-  throw new Error('Firebase Project ID가 설정되지 않았습니다. .env.local 파일을 확인하세요.');
+if (typeof window === 'undefined') {
+  // 서버 사이드 (빌드 타임 포함)
+  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+    console.warn('⚠️ Firebase 환경 변수가 설정되지 않았습니다. Vercel 환경 변수를 확인하세요.');
+  }
+} else {
+  // 클라이언트 사이드 (런타임)
+  if (!firebaseConfig.apiKey) {
+    throw new Error('Firebase API Key가 설정되지 않았습니다. 환경 변수를 확인하세요.');
+  }
+  if (!firebaseConfig.projectId) {
+    throw new Error('Firebase Project ID가 설정되지 않았습니다. 환경 변수를 확인하세요.');
+  }
 }
 
 /**
