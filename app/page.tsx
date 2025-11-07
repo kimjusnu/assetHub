@@ -529,7 +529,11 @@ export default function Home() {
 
   // 드래그 앤 드롭 센서 설정
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -594,6 +598,9 @@ export default function Home() {
       opacity: isDragging ? 0.5 : 1,
     };
 
+    // 각 월별 입력값을 별도로 관리
+    const [inputValues, setInputValues] = useState<Record<string, string>>({});
+
     // 만기일 포맷팅
     const formatMaturityDate = (dateStr?: string) => {
       if (!dateStr) return "-";
@@ -608,18 +615,18 @@ export default function Home() {
       }
     };
 
-    return (
+  return (
       <tr ref={setNodeRef} style={style} className="hover:bg-slate-50">
-        <td className="border border-slate-200 px-2 py-2 text-xs font-medium text-slate-700 bg-slate-50">
+        <td className="sticky left-0 z-10 border border-slate-200 px-2 py-2 text-xs font-medium text-slate-700 bg-slate-50">
           <div className="flex items-center gap-2">
             <div
               {...attributes}
               {...listeners}
-              className="cursor-grab active:cursor-grabbing touch-none"
+              className="cursor-grab active:cursor-grabbing touch-none select-none p-1 -ml-1 hover:bg-slate-200 rounded transition-colors"
             >
               <GripVertical className="w-4 h-4 text-slate-400" />
             </div>
-            <div>{product.name}</div>
+            <div className="select-none">{product.name}</div>
           </div>
         </td>
         <td className="border border-slate-200 px-2 py-2 text-xs text-slate-600 bg-slate-50">
@@ -628,34 +635,131 @@ export default function Home() {
         {months.map((month) => {
           const monthKey = month;
           const changeAmount = trends[monthKey] || 0;
+          const inputKey = `${product.uniqueKey}-${monthKey}`;
+          const rawInputValue = inputValues[inputKey];
+          
+          // 표시할 값: 입력 중이면 입력값에 쉼표 추가, 아니면 저장된 값에 쉼표 추가
+          let displayValue = "";
+          if (rawInputValue !== undefined) {
+            // 입력 중인 값에 쉼표 추가
+            const numericPart = rawInputValue.replace(/[^0-9]/g, "");
+            if (numericPart) {
+              const formatted = numericPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+              displayValue = rawInputValue.startsWith("-") ? `-${formatted}` : formatted;
+            } else if (rawInputValue === "-") {
+              displayValue = "-";
+            }
+          } else if (changeAmount !== 0) {
+            // 저장된 값에 쉼표 추가
+            displayValue = formatNumber(Math.abs(changeAmount));
+            if (changeAmount < 0) {
+              displayValue = `-${displayValue}`;
+            }
+          }
 
           return (
             <td key={monthKey} className="border border-slate-200 px-1 py-1">
               <input
                 type="text"
                 placeholder="0"
-                value={
-                  changeAmount !== 0
-                    ? changeAmount > 0
-                      ? `+${formatNumber(changeAmount)}`
-                      : formatNumber(changeAmount)
-                    : ""
-                }
+                value={displayValue}
                 onChange={(e) => {
-                  let inputValue = e.target.value;
-                  const isNegative = inputValue.startsWith("-");
-                  const numericValue = inputValue.replace(/[^0-9]/g, "");
-                  const amount = numericValue ? Number(numericValue) : 0;
+                  const inputValue = e.target.value;
+                  
+                  // 쉼표 제거하고 숫자와 마이너스만 추출
+                  let cleanedValue = inputValue.replace(/[^0-9-]/g, "");
+                  
+                  // 마이너스가 여러 개 있으면 첫 번째만 유지
+                  if (cleanedValue.includes("-")) {
+                    const firstMinusIndex = cleanedValue.indexOf("-");
+                    if (firstMinusIndex !== 0) {
+                      // 마이너스가 맨 앞이 아니면 제거
+                      cleanedValue = cleanedValue.replace(/-/g, "");
+                    } else {
+                      // 맨 앞에 마이너스가 있으면 나머지 마이너스 제거
+                      cleanedValue = "-" + cleanedValue.slice(1).replace(/-/g, "");
+                    }
+                  }
+                  
+                  // 입력값만 저장 (setMonthlyTrends 호출하지 않음)
+                  setInputValues(prev => ({
+                    ...prev,
+                    [inputKey]: cleanedValue
+                  }));
+                }}
+                onBlur={(e) => {
+                  const inputValue = e.target.value;
+                  
+                  // 쉼표 제거
+                  const cleanedValue = inputValue.replace(/[^0-9-]/g, "");
+                  
+                  // 빈 문자열이면 0으로 설정
+                  if (cleanedValue === "" || cleanedValue === "-") {
+                    setMonthlyTrends({
+                      ...monthlyTrends,
+                      [product.name]: {
+                        ...trends,
+                        [monthKey]: 0,
+                      },
+                    });
+                    setInputValues(prev => {
+                      const newValues = { ...prev };
+                      delete newValues[inputKey];
+                      return newValues;
+                    });
+                    return;
+                  }
 
-                  const finalAmount = isNegative ? -amount : amount;
+                  // 마이너스 처리
+                  let finalValue = cleanedValue;
+                  if (cleanedValue.includes("-")) {
+                    const firstMinusIndex = cleanedValue.indexOf("-");
+                    if (firstMinusIndex !== 0) {
+                      finalValue = cleanedValue.replace(/-/g, "");
+                    } else {
+                      finalValue = "-" + cleanedValue.slice(1).replace(/-/g, "");
+                    }
+                  }
 
-                  setMonthlyTrends({
-                    ...monthlyTrends,
-                    [product.name]: {
-                      ...trends,
-                      [monthKey]: finalAmount,
-                    },
+                  // 숫자만 추출 (마이너스 제외)
+                  const numbersOnly = finalValue.replace(/-/g, "");
+                  
+                  // 빈 값이거나 마이너스만 있으면 0
+                  if (numbersOnly === "" || finalValue === "-") {
+                    setMonthlyTrends({
+                      ...monthlyTrends,
+                      [product.name]: {
+                        ...trends,
+                        [monthKey]: 0,
+                      },
+                    });
+                  } else {
+                    // 숫자로 변환
+                    const amount = finalValue.startsWith("-")
+                      ? -Number(numbersOnly)
+                      : Number(numbersOnly);
+
+                    setMonthlyTrends({
+                      ...monthlyTrends,
+                      [product.name]: {
+                        ...trends,
+                        [monthKey]: amount,
+                      },
+                    });
+                  }
+                  
+                  // 포커스를 잃으면 입력값 초기화 (다음에 표시할 때는 저장된 값 사용)
+                  setInputValues(prev => {
+                    const newValues = { ...prev };
+                    delete newValues[inputKey];
+                    return newValues;
                   });
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
                 }}
                 disabled={isSaving}
                 className="w-full px-1.5 py-1 border rounded text-xs bg-white text-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-gray-300 focus:ring-slate-600 focus:border-slate-600 hover:border-slate-400 h-7 text-center"
@@ -1138,8 +1242,8 @@ export default function Home() {
                     복잡한 절차 없이 자산을 쉽고 간단하게
                     {/* <br /> */}
                     기록하여 관리할 수 있습니다
-                  </p>
-                </div>
+          </p>
+        </div>
 
                 <div>
                   <div className="flex items-center gap-2 mb-3">
@@ -1892,17 +1996,33 @@ export default function Home() {
                     // 드래그 가능한 아이템 ID 배열
                     const itemIds = sortedProducts.map((p) => p.uniqueKey);
 
+                    // 드래그 종료 핸들러 (인라인으로 정의하여 itemIds에 접근)
+                    const handleDragEndLocal = (event: DragEndEvent) => {
+                      const { active, over } = event;
+
+                      if (over && active.id !== over.id) {
+                        const oldIndex = itemIds.indexOf(active.id as string);
+                        const newIndex = itemIds.indexOf(over.id as string);
+
+                        if (oldIndex !== -1 && newIndex !== -1) {
+                          // itemIds를 기준으로 새로운 순서 생성
+                          const newOrder = arrayMove(itemIds, oldIndex, newIndex);
+                          setMonthlyTrendsOrder(newOrder);
+                        }
+                      }
+                    };
+
                     return (
                       <DndContext
                         sensors={sensors}
                         collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
+                        onDragEnd={handleDragEndLocal}
                       >
                         <div className="min-w-full">
                           <table className="w-full border-collapse">
                             <thead className="sticky top-0 bg-slate-50 z-10">
                               <tr>
-                                <th className="border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100 min-w-[120px]">
+                                <th className="sticky left-0 z-20 border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100 min-w-[120px]">
                                   자산명
                                 </th>
                                 <th className="border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 text-left bg-slate-100">
@@ -1955,6 +2075,100 @@ export default function Home() {
                                   );
                                 })}
                               </SortableContext>
+                              {/* 월별 총합 행 */}
+                              <tr className="bg-slate-100 hover:bg-slate-200">
+                                <td
+                                  colSpan={2}
+                                  className="sticky left-0 z-10 border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-900 bg-slate-200"
+                                >
+                                  월별 총합
+                                </td>
+                                {months.map((month) => {
+                                  // 해당 월의 모든 자산 저축액 합계 계산
+                                  const total = sortedProducts.reduce(
+                                    (sum, product) => {
+                                      const assetName = product.name;
+                                      const trends =
+                                        monthlyTrends[assetName] || {};
+                                      const amount = trends[month] || 0;
+                                      return sum + amount;
+                                    },
+                                    0
+                                  );
+                                  return (
+                                    <td
+                                      key={month}
+                                      className="border border-slate-200 px-1.5 py-2 text-xs font-semibold text-slate-900 text-right bg-slate-200"
+                                    >
+                                      {total !== 0 
+                                        ? `${total < 0 ? "-" : ""}${formatNumber(Math.abs(total))}` 
+                                        : "-"}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                              {/* 증감액(저축액) 행 */}
+                              <tr className="bg-slate-50 hover:bg-slate-100">
+                                <td
+                                  colSpan={2}
+                                  className="sticky left-0 z-10 border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-800 bg-slate-100"
+                                >
+                                  증감액(저축액)
+                                </td>
+                                {months.map((month, monthIndex) => {
+                                  // 현재 월의 총합 계산
+                                  const currentTotal = sortedProducts.reduce(
+                                    (sum, product) => {
+                                      const assetName = product.name;
+                                      const trends =
+                                        monthlyTrends[assetName] || {};
+                                      const amount = trends[month] || 0;
+                                      return sum + amount;
+                                    },
+                                    0
+                                  );
+
+                                  // 이전 달의 총합 계산
+                                  let previousTotal = 0;
+                                  if (monthIndex > 0) {
+                                    const previousMonth = months[monthIndex - 1];
+                                    previousTotal = sortedProducts.reduce(
+                                      (sum, product) => {
+                                        const assetName = product.name;
+                                        const trends =
+                                          monthlyTrends[assetName] || {};
+                                        const amount = trends[previousMonth] || 0;
+                                        return sum + amount;
+                                      },
+                                      0
+                                    );
+                                  }
+
+                                  // 증감액 계산 (현재 총합 - 이전 총합)
+                                  const changeAmount = currentTotal - previousTotal;
+                                  const isPositive = changeAmount > 0;
+                                  const isNegative = changeAmount < 0;
+                                  
+                                  return (
+                                    <td
+                                      key={month}
+                                      className={`border border-slate-200 px-1.5 py-2 text-xs font-semibold text-right bg-slate-100 ${
+                                        isPositive
+                                          ? "text-green-600"
+                                          : isNegative
+                                          ? "text-red-600"
+                                          : "text-slate-600"
+                                      }`}
+                                    >
+                                      {monthIndex === 0
+                                        ? "-" // 1월은 이전 달이 없으므로 "-"
+                                        : changeAmount !== 0
+                                        ? `${isPositive ? "+" : ""}${formatNumber(Math.abs(changeAmount))}`
+                                        : "-"}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
                             </tbody>
                           </table>
                         </div>
@@ -2337,8 +2551,8 @@ export default function Home() {
                   })()}
                 </div>
               </div>
-            </div>
-          </main>
+        </div>
+      </main>
         </div>
       </div>
     </div>
